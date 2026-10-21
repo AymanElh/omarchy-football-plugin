@@ -16,10 +16,6 @@ LEAGUES = {
     "uefa.europa.conf": "Conference League", "esp.copa_del_rey": "Copa del Rey",
     "eng.fa": "FA Cup", "ita.coppa_italia": "Coppa Italia", "ger.dfb_pokal": "DFB-Pokal",
 }
-ALL_TOURNAMENTS = ["uefa.champions", "caf.champions", "uefa.europa", "uefa.europa.conf",
-                   "esp.copa_del_rey", "eng.fa", "ita.coppa_italia", "ger.dfb_pokal"]
-
-
 def fetch_json(url):
     request = urllib.request.Request(url, headers=HEADERS)
     try:
@@ -53,7 +49,7 @@ def cmd_next(team_id, primary_league, selected_leagues):
         print("null")
         return
     leagues = []
-    for league in [primary_league, *selected_leagues, *ALL_TOURNAMENTS]:
+    for league in [primary_league, *selected_leagues]:
         if league and league not in leagues:
             leagues.append(league)
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(leagues))) as pool:
@@ -120,7 +116,7 @@ def fetch_scoreboard(league, date_text):
             "detail": status.get("shortDetail") or status.get("detail") or "",
             "homeId": str(home_team.get("id", "")), "awayId": str(away_team.get("id", "")),
             "home": home_team.get("shortDisplayName") or home_team.get("displayName") or "?",
-            "away": away_team.get("shortDispnlayName") or away_team.get("displayName") or "?",
+            "away": away_team.get("shortDisplayName") or away_team.get("displayName") or "?",
             "homeScore": home.get("score", ""), "awayScore": away.get("score", ""),
         })
     return result
@@ -130,19 +126,14 @@ def cmd_matches(leagues, date_text, favorite_id):
     selected = [league for league in leagues if league]
     if not selected:
         selected = ["esp.1", "eng.1", "uefa.champions"]
-    extra = [league for league in ALL_TOURNAMENTS if league not in selected]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(selected) + len(extra))) as pool:
-        futures = [pool.submit(fetch_scoreboard, league, date_text) for league in selected + extra]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(selected))) as pool:
+        futures = [pool.submit(fetch_scoreboard, league, date_text) for league in selected]
         results = [future.result() for future in futures]
     output, seen = [], set()
-    for index, batch in enumerate(results):
-        is_extra = index >= len(selected)
+    for batch in results:
         for match in batch:
             match_id = match["id"]
             if match_id in seen:
-                continue
-            is_favorite = favorite_id and str(favorite_id) in (match["homeId"], match["awayId"])
-            if is_extra and not is_favorite:
                 continue
             seen.add(match_id)
             output.append(match)
