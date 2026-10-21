@@ -147,7 +147,7 @@ Panel {
   }
   Process { id: reminderProc }
   Timer {
-    interval: 180000; running: true; repeat: true
+    interval: 120000; running: true; repeat: true
     onTriggered: { root.fetchNextMatch(); if (root.opened) root.fetchMatches() }
   }
   Timer { interval: 60000; running: true; repeat: true; onTriggered: { root.updateLabel(); root.checkReminder() } }
@@ -160,8 +160,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    centerOnBar: true
-    contentWidth: popup.fittedContentWidth(Style.space(480))
+    centerOnBar: false
+    contentWidth: popup.fittedContentWidth(Style.space(520))
     contentHeight: popup.fittedContentHeight(mainColumn.implicitHeight, Style.space(600))
 
     PanelKeyCatcher {

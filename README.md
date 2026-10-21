@@ -9,7 +9,7 @@ A native Omarchy bar widget for following selected football competitions and one
 - Match list for the selected local calendar day, with live scores/status when supplied by the data source.
 - Date navigation, team search, favourite-match highlighting, and optional desktop reminders.
 
-Kickoff timestamps are formatted in the computer's local timezone. CAF Champions League is requested with the `caf.champions` ESPN identifier; availability may vary, so verify it on your system.
+Kickoff timestamps are formatted in the computer's local timezone. The popup and favourite-team schedule refresh every two minutes. Match requests use only the selected competitions; the favourite-team lookup uses its competition plus the selected competitions. CAF Champions League is requested with ESPN's `caf.champions` identifier; availability may vary, so verify it on your system.
 
 ## Files and technologies
 
