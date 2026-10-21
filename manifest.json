@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "ayman.football",
+  "name": "Football Matches",
+  "version": "1.0.0",
+  "author": "Ayman",
+  "description": "Selected football leagues, one favourite team, and its next match in the bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Football",
+    "description": "Follow selected leagues and your favourite team's next match.",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "selectedLeagues": ["esp.1", "eng.1", "fra.1", "ger.1", "uefa.champions", "caf.champions"],
+      "favoriteTeam": null,
+      "remindersEnabled": true,
+      "reminderMinutes": 15
+    }
+  }
+}
