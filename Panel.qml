@@ -9,14 +9,14 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "ayman.football"
-  ipcTarget: "ayman.football"
+  moduleName: "community.football-matches"
+  ipcTarget: "community.football-matches"
   manageIpc: false
 
   property var anchorItem: null
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
-  readonly property string scriptPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/ayman.football/api.py"
+  readonly property string scriptPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/community.football-matches/api.py"
 
   property var selectedLeagues: Model.selectedValues(setting("selectedLeagues", Model.defaultSelected()))
   property var favoriteTeam: setting("favoriteTeam", null)
