@@ -23,12 +23,28 @@ Panel {
   property bool remindersEnabled: setting("remindersEnabled", true) === true
   property int reminderMinutes: Math.max(5, Number(setting("reminderMinutes", 15)))
   property date selectedDate: new Date()
+  property date calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  property bool calendarOpen: false
   property var matches: []
   property var availableTeams: []
   property var nextMatch: null
   property string label: Model.formatBarLabel(nextMatch, favoriteTeam)
   property bool showingSettings: false
   property string teamSearchFilter: ""
+  property string teamSearchRequested: ""
+  property string teamSearchCompleted: ""
+  property bool isSearchingTeams: false
+  property bool teamSearchPending: false
+  property string leagueSearchFilter: ""
+  property string leagueSearchRequested: ""
+  property string leagueSearchCompleted: ""
+  property var discoveredLeagues: []
+  property bool leagueCatalogLoaded: false
+  property bool isLoadingLeagues: false
+  property string matchScope: "day"
+  property string leagueMatchesId: selectedLeagues.length ? selectedLeagues[0] : ""
+  property bool matchesRefreshPending: false
+  property bool teamsRefreshPending: false
   property bool isLoadingMatches: false
   property bool isLoadingTeams: false
   property bool isLoadingNextMatch: false
@@ -57,22 +73,50 @@ Panel {
       bar.shell.updateEntryInline(moduleName, entry)
   }
   function refreshAll() { fetchNextMatch(); fetchMatches(); if (showingSettings || availableTeams.length === 0) fetchTeams() }
+  function filteredLeagues() {
+    var q = leagueSearchFilter.trim().toLowerCase(), result = [], seen = {}
+    var all = q ? Model.leagues.concat(discoveredLeagues) : Model.leagues
+    for (var i = 0; i < all.length; i++) {
+      var item = all[i]
+      if (seen[item.id]) continue
+      seen[item.id] = true
+      if (!q || item.name.toLowerCase().indexOf(q) >= 0 || item.id.toLowerCase().indexOf(q) >= 0) result.push(item)
+    }
+    return result
+  }
+  function searchLeagues() {
+    var query = leagueSearchFilter.trim()
+    if (query.length < 2) return
+    if (leagueCatalogLoaded) { leagueSearchCompleted = query; return }
+    if (isLoadingLeagues) return
+    leagueSearchRequested = query
+    isLoadingLeagues = true
+    leagueProc.command = ["python3", scriptPath, "leagues", "200"]
+    leagueProc.running = true
+  }
+  function onLeaguesFinished(raw) {
+    isLoadingLeagues = false; leagueCatalogLoaded = true; leagueSearchCompleted = leagueSearchFilter.trim()
+    try { var data = JSON.parse(raw); discoveredLeagues = Array.isArray(data) ? data : [] }
+    catch (e) { discoveredLeagues = [] }
+  }
   function toggleLeague(id) {
     var next = []
     for (var i = 0; i < selectedLeagues.length; i++) if (selectedLeagues[i] !== id) next.push(selectedLeagues[i])
     if (next.length === selectedLeagues.length) next.push(id)
     if (next.length === 0) next = [id]
     selectedLeagues = next
+    if (selectedLeagues.indexOf(leagueMatchesId) < 0) leagueMatchesId = selectedLeagues[0]
+    teamSearchCompleted = ""
     persistSettings(); fetchTeams(); fetchMatches(); fetchNextMatch()
   }
   function isLeagueSelected(id) { return selectedLeagues.indexOf(id) >= 0 }
   function selectFavoriteTeam(team) {
-    if (favoriteTeam && String(favoriteTeam.id) === String(team.id)) favoriteTeam = null
+    if (favoriteTeam && String(favoriteTeam.id) === String(team.id)) { favoriteTeam = null; nextMatch = null; matchScope = "day" }
     else favoriteTeam = { id: String(team.id), name: team.name, short: team.short || team.name,
                          leagueId: team.leagueId || selectedLeagues[0] || "esp.1" }
     persistSettings(); fetchNextMatch(); fetchMatches()
   }
-  function clearFavoriteTeam() { favoriteTeam = null; nextMatch = null; persistSettings(); updateLabel() }
+  function clearFavoriteTeam() { favoriteTeam = null; matchScope = "day"; nextMatch = null; persistSettings(); updateLabel(); fetchMatches() }
   function fetchNextMatch() {
     if (!favoriteTeam || !favoriteTeam.id) { nextMatch = null; updateLabel(); return }
     if (nextProc.running) return
@@ -88,20 +132,55 @@ Panel {
     updateLabel(); checkReminder()
   }
   function updateLabel() { label = Model.formatBarLabel(nextMatch, favoriteTeam) }
+  function setMatchScope(scope) {
+    matchScope = scope; matches = []; matchesError = ""; isLoadingMatches = true
+    fetchMatches()
+  }
+  function selectLeagueMatches(id) {
+    if (!id || id === leagueMatchesId) return
+    leagueMatchesId = id; matches = []; matchesError = ""; isLoadingMatches = true
+    fetchMatches()
+  }
   function fetchMatches() {
-    if (matchesProc.running) return
+    if (matchesProc.running) { matchesRefreshPending = true; return }
     isLoadingMatches = true; matchesError = ""
-    matchesProc.command = ["python3", scriptPath, "matches", selectedLeagues.join(","),
-                          Model.formatDateParam(selectedDate), favoriteTeam && favoriteTeam.id ? String(favoriteTeam.id) : ""]
+    var leagues = selectedLeagues.slice(0)
+    if (matchScope === "league") {
+      if (!leagueMatchesId || leagues.indexOf(leagueMatchesId) < 0) {
+        leagueMatchesId = leagues.length ? leagues[0] : ""
+      }
+      if (!leagueMatchesId) { matches = []; isLoadingMatches = false; return }
+      matchesProc.command = ["python3", scriptPath, "league-matches", leagueMatchesId, "30"]
+      matchesProc.running = true
+      return
+    }
+    if (matchScope === "team") {
+      if (!favoriteTeam || !favoriteTeam.id) { matches = []; isLoadingMatches = false; return }
+      if (favoriteTeam.leagueId && leagues.indexOf(favoriteTeam.leagueId) < 0) leagues.push(favoriteTeam.leagueId)
+      matchesProc.command = ["python3", scriptPath, "team-matches", String(favoriteTeam.id), favoriteTeam.leagueId || "esp.1", leagues.join(","), "10"]
+      matchesProc.running = true
+      return
+    }
+    var dateParam = Model.formatDateParam(selectedDate)
+    if (matchScope === "upcoming") {
+      var start = new Date(); start.setHours(0, 0, 0, 0)
+      var end = new Date(start); end.setDate(end.getDate() + 6)
+      dateParam = Model.formatDateParam(start) + "-" + Model.formatDateParam(end)
+    }
+    matchesProc.command = ["python3", scriptPath, "matches", leagues.join(","), dateParam,
+                          ""]
     matchesProc.running = true
   }
   function onMatchesFinished(raw) {
+    if (matchesRefreshPending) {
+      matchesRefreshPending = false; isLoadingMatches = true; fetchMatches(); return
+    }
     isLoadingMatches = false
     try { var data = JSON.parse(raw); matches = Array.isArray(data) ? data : [] }
     catch (e) { matches = []; matchesError = "Could not read match data" }
   }
   function fetchTeams() {
-    if (teamsProc.running) return
+    if (teamsProc.running) { teamsRefreshPending = true; return }
     isLoadingTeams = true
     teamsProc.command = ["python3", scriptPath, "teams", selectedLeagues.join(",")]
     teamsProc.running = true
@@ -110,12 +189,54 @@ Panel {
     isLoadingTeams = false
     try { var data = JSON.parse(raw); availableTeams = Array.isArray(data) ? data : [] }
     catch (e) { availableTeams = [] }
+    if (teamsRefreshPending) { teamsRefreshPending = false; fetchTeams() }
+  }
+  function filteredTeams() {
+    var result = [], filter = teamSearchFilter.trim().toLowerCase()
+    for (var i = 0; i < availableTeams.length; i++) {
+      var team = availableTeams[i]
+      if (!filter) {
+        if (Model.isPopularTeam(team) || (favoriteTeam && String(favoriteTeam.id) === String(team.id))) result.push(team)
+      } else if (Model.matchesTeamSearch(team, filter)) result.push(team)
+    }
+    return result
+  }
+  function searchTeamsIfNeeded() {
+    var query = teamSearchFilter.trim()
+    if (query.length < 2 || filteredTeams().length > 0 || teamSearchCompleted === query) return
+    if (teamSearchProc.running) { teamSearchPending = true; return }
+    teamSearchRequested = query; isSearchingTeams = true
+    teamSearchProc.command = ["python3", scriptPath, "search-teams", selectedLeagues.join(","), query]
+    teamSearchProc.running = true
+  }
+  function onTeamSearchFinished(raw) {
+    isSearchingTeams = false; teamSearchCompleted = teamSearchRequested
+    try {
+      var found = JSON.parse(raw), combined = availableTeams.slice(0), seen = {}
+      for (var i = 0; i < combined.length; i++) seen[String(combined[i].id)] = true
+      if (Array.isArray(found)) for (var j = 0; j < found.length; j++)
+        if (!seen[String(found[j].id)]) combined.push(found[j])
+      availableTeams = combined
+    } catch (e) {}
+    if (teamSearchPending) { teamSearchPending = false; searchTeamsIfNeeded() }
   }
   function changeDay(amount) {
     var d = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate())
-    d.setDate(d.getDate() + amount); selectedDate = d; fetchMatches()
+    d.setDate(d.getDate() + amount); selectedDate = d
+    calendarMonth = new Date(d.getFullYear(), d.getMonth(), 1); matches = []; isLoadingMatches = true; fetchMatches()
   }
-  function goToToday() { selectedDate = new Date(); fetchMatches() }
+  function goToToday() { selectedDate = new Date(); calendarMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1); matches = []; isLoadingMatches = true; fetchMatches() }
+  function calendarDays() {
+    var first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
+    var start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7))
+    var cells = []
+    for (var i = 0; i < 42; i++) {
+      var date = new Date(start); date.setDate(start.getDate() + i)
+      cells.push({ date: date, inMonth: date.getMonth() === calendarMonth.getMonth() })
+    }
+    return cells
+  }
+  function shiftCalendarMonth(amount) { calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + amount, 1) }
   function isTodaySelected() {
     var now = new Date()
     return selectedDate.getFullYear() === now.getFullYear() && selectedDate.getMonth() === now.getMonth() && selectedDate.getDate() === now.getDate()
@@ -125,7 +246,7 @@ Panel {
     return String(match.homeId) === String(favoriteTeam.id) || String(match.awayId) === String(favoriteTeam.id)
   }
   function checkReminder() {
-    if (!remindersEnabled || !nextMatch || reminderProc.running) return
+    if (!favoriteTeam || !remindersEnabled || !nextMatch || reminderProc.running) return
     var minutes = (new Date(nextMatch.date).getTime() - Date.now()) / 60000
     if (minutes < 0 || minutes > reminderMinutes + 1) return
     var notified = setting("notifiedMatchIds", [])
@@ -145,13 +266,21 @@ Panel {
   Process { id: teamsProc
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onTeamsFinished(String(text || "").trim()) }
   }
+  Process { id: teamSearchProc
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onTeamSearchFinished(String(text || "").trim()) }
+  }
+  Timer { id: teamSearchTimer; interval: 400; repeat: false; onTriggered: root.searchTeamsIfNeeded() }
+  Process { id: leagueProc
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onLeaguesFinished(String(text || "").trim()) }
+  }
+  Timer { id: leagueSearchTimer; interval: 400; repeat: false; onTriggered: root.searchLeagues() }
   Process { id: reminderProc }
   Timer {
     interval: 120000; running: true; repeat: true
-    onTriggered: { root.fetchNextMatch(); if (root.opened) root.fetchMatches() }
+    onTriggered: { root.fetchNextMatch(); if (root.opened && root.matchScope === "day") root.fetchMatches() }
   }
   Timer { interval: 60000; running: true; repeat: true; onTriggered: { root.updateLabel(); root.checkReminder() } }
-  Component.onCompleted: { fetchNextMatch(); fetchMatches(); fetchTeams() }
+  Component.onCompleted: { fetchNextMatch(); fetchMatches() }
 
   KeyboardPanel {
     id: popup
@@ -229,7 +358,7 @@ Panel {
                 Text {
                   width: parent.width
                   visible: root.nextMatch !== null
-                  text: root.nextMatch ? root.nextMatch.league + " · " + Model.formatDayLabel(new Date(root.nextMatch.date)) + " at " + Model.formatMatchTime(root.nextMatch.date) : ""
+                  text: root.nextMatch ? root.nextMatch.league + (root.nextMatch.round ? " · " + root.nextMatch.round : "") + " · " + Model.formatDayLabel(new Date(root.nextMatch.date)) + " at " + Model.formatMatchTime(root.nextMatch.date) : ""
                   color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
                 }
                 Text {
@@ -240,19 +369,87 @@ Panel {
                 }
               }
             }
-            Row {
+            Flow {
               width: parent.width
-              spacing: Style.space(8)
+              spacing: Style.space(6)
+              Button { text: "By day"; selected: root.matchScope === "day"; bordered: true; onClicked: root.setMatchScope("day") }
+              Button { text: "Next 7 days"; selected: root.matchScope === "upcoming"; bordered: true; onClicked: root.setMatchScope("upcoming") }
+              Button { text: root.favoriteTeam ? (root.favoriteTeam.short || root.favoriteTeam.name) + " · Next 10" : "Favourite · Next 10"; enabled: !!root.favoriteTeam; selected: root.matchScope === "team"; bordered: true; onClicked: root.setMatchScope("team") }
+              Button { text: "By league"; selected: root.matchScope === "league"; bordered: true; onClicked: root.setMatchScope("league") }
+            }
+            QQC.ComboBox {
+              visible: root.matchScope === "league"
+              width: parent.width
+              model: root.selectedLeagues.map(function(id) { return Model.leagueName(id) })
+              currentIndex: Math.max(0, root.selectedLeagues.indexOf(root.leagueMatchesId))
+              onActivated: function(index) { root.selectLeagueMatches(root.selectedLeagues[index]) }
+            }
+            Text {
+              visible: root.matchScope === "league"
+              text: "Scheduled matches over the next 30 days"
+              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+            }
+            Row {
+              visible: root.matchScope === "day"
+              width: parent.width; spacing: Style.space(8)
               Button { text: "◀"; bordered: true; onClicked: root.changeDay(-1) }
               Text { width: parent.width - 120; text: Model.formatDayLabel(root.selectedDate); color: Commons.Color.foreground
                 font.family: Style.font.family; font.pixelSize: Style.font.body; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
               Button { text: "▶"; bordered: true; onClicked: root.changeDay(1) }
               Button { visible: !root.isTodaySelected(); text: "Today"; bordered: true; onClicked: root.goToToday() }
             }
+            Row {
+              visible: root.matchScope === "day"
+              width: parent.width; spacing: Style.space(8)
+              Text { text: "Selected: " + Model.formatDayLabel(root.selectedDate); color: Commons.Color.muted
+                font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter }
+              Button { text: root.calendarOpen ? "Close calendar" : "Choose date"; bordered: true
+                onClicked: { root.calendarMonth = new Date(root.selectedDate.getFullYear(), root.selectedDate.getMonth(), 1); root.calendarOpen = !root.calendarOpen } }
+            }
+            Column {
+              visible: root.matchScope === "day" && root.calendarOpen
+              width: parent.width; spacing: Style.space(6)
+              Row {
+                width: parent.width
+                Button { text: "◀"; bordered: true; onClicked: root.shiftCalendarMonth(-1) }
+                Text { width: parent.width - Style.space(100); text: Model.formatMonthLabel(root.calendarMonth); color: Commons.Color.foreground
+                  font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                Button { text: "▶"; bordered: true; onClicked: root.shiftCalendarMonth(1) }
+              }
+              Row {
+                width: parent.width
+                Repeater {
+                  model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+                  delegate: Text { required property string modelData; width: parent.width / 7; text: modelData
+                    color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignHCenter }
+                }
+              }
+              Grid {
+                id: calendarGrid
+                columns: 7; width: parent.width; spacing: Style.space(3)
+                Repeater {
+                  model: root.calendarDays()
+                  delegate: Button {
+                    required property var modelData
+                    width: (calendarGrid.width - Style.space(18)) / 7
+                    height: Style.space(34)
+                    text: String(modelData.date.getDate())
+                    opacity: modelData.inMonth ? 1.0 : 0.42
+                    selected: Model.sameLocalDay(modelData.date, root.selectedDate)
+                    bordered: true
+                    onClicked: {
+                      root.selectedDate = modelData.date
+                      root.calendarMonth = new Date(modelData.date.getFullYear(), modelData.date.getMonth(), 1)
+                      root.calendarOpen = false; root.matches = []; root.isLoadingMatches = true; root.fetchMatches()
+                    }
+                  }
+                }
+              }
+            }
             Text { visible: root.isLoadingMatches; text: "Loading matches…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
             Text {
               visible: !root.isLoadingMatches && root.matches.length === 0
-              text: root.matchesError || "No matches found for this day in the selected leagues."
+              text: root.matchesError || (root.matchScope === "team" ? "No upcoming matches were found for " + (root.favoriteTeam ? root.favoriteTeam.name : "your favourite team") + "." : root.matchScope === "upcoming" ? "No upcoming matches in the next seven days." : root.matchScope === "league" ? "No scheduled matches were found for this league in the next 30 days." : "No matches found for this day in the selected leagues.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
             Repeater {
@@ -263,7 +460,7 @@ Panel {
                 width: mainColumn.width
                 implicitHeight: matchColumn.implicitHeight + Style.space(16)
                 radius: Style.cornerRadius
-                color: favourite ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.10) : Qt.rgba(1, 1, 1, 0.03)
+                color: favourite ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.12) : Qt.rgba(Commons.Color.menu.r, Commons.Color.menu.g, Commons.Color.menu.b, 0.78)
                 border.width: favourite ? 2 : 1
                 border.color: favourite ? Commons.Color.accent : Qt.rgba(Commons.Color.muted.r, Commons.Color.muted.g, Commons.Color.muted.b, 0.25)
                 Column {
@@ -274,13 +471,29 @@ Panel {
                   Row {
                     width: parent.width
                     spacing: Style.space(8)
-                    Text { text: modelData.league; color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
-                    Text {
-                      text: modelData.state === "in" ? "LIVE · " + modelData.detail : modelData.state === "post" ? "FT" : Model.formatMatchTime(modelData.date)
-                      color: modelData.state === "in" ? Commons.Color.accent : Commons.Color.muted
-                      font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: modelData.state === "in"
+                    id: matchMetaRow
+                    Rectangle {
+                      id: leaguePill
+                      width: Math.min(leagueText.implicitWidth + Style.space(14), parent.width * 0.55)
+                      height: leagueText.implicitHeight + Style.space(8); radius: Style.cornerRadius
+                      color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.13)
+                      border.width: 1; border.color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.35)
+                      Text { id: leagueText; anchors.centerIn: parent; width: parent.width - Style.space(10); text: modelData.league + (modelData.round ? " · " + modelData.round : ""); elide: Text.ElideRight
+                        color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
                     }
-                    Text { visible: favourite; text: "★ FAVOURITE"; color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+                    Item { width: Math.max(0, matchMetaRow.width - leaguePill.width - matchTimePill.width - Style.space(16)); height: 1 }
+                    Rectangle {
+                      id: matchTimePill
+                      readonly property bool live: modelData.state === "in"
+                      height: timeText.implicitHeight + Style.space(8); width: timeText.implicitWidth + Style.space(14); radius: Style.cornerRadius
+                      color: Qt.rgba((live ? Commons.Color.urgent : Commons.Color.foreground).r, (live ? Commons.Color.urgent : Commons.Color.foreground).g, (live ? Commons.Color.urgent : Commons.Color.foreground).b, live ? 0.16 : 0.07)
+                      border.width: 1; border.color: Qt.rgba((live ? Commons.Color.urgent : Commons.Color.muted).r, (live ? Commons.Color.urgent : Commons.Color.muted).g, (live ? Commons.Color.urgent : Commons.Color.muted).b, 0.32)
+                      Text { id: timeText
+                        text: (root.matchScope === "upcoming" || root.matchScope === "team" || root.matchScope === "league" ? Model.formatDayLabel(new Date(modelData.date)) + " · " : "") + (modelData.state === "in" ? "LIVE · " + modelData.detail : modelData.state === "post" ? "FT" : Model.formatMatchTime(modelData.date))
+                        color: parent.live ? Commons.Color.urgent : Commons.Color.foreground
+                        font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: parent.live
+                        anchors.centerIn: parent }
+                    }
                   }
                   Row {
                     width: parent.width
@@ -301,12 +514,15 @@ Panel {
             width: parent.width
             spacing: Style.space(12)
             Text { text: "Favourite leagues"; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true }
-            Text { text: "Choose the competitions to show in your match list."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
+            Text { text: "Popular competitions are ready immediately. Search to find others; teams follow your selected leagues."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; wrapMode: Text.WordWrap }
+            TextField { width: parent.width; placeholderText: "Search leagues by name…"; text: root.leagueSearchFilter
+              onTextChanged: { root.leagueSearchFilter = text; root.leagueSearchCompleted = ""; root.leagueSearchTimer.restart() } }
+            Text { visible: root.isLoadingLeagues; text: "Searching leagues…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
             Flow {
               width: parent.width
               spacing: Style.space(6)
               Repeater {
-                model: Model.leagues
+                model: root.filteredLeagues()
                 delegate: Button {
                   required property var modelData
                   text: modelData.name
@@ -316,9 +532,11 @@ Panel {
                 }
               }
             }
+            Text { visible: root.leagueSearchFilter.trim().length >= 2 && root.leagueSearchCompleted === root.leagueSearchFilter.trim() && root.filteredLeagues().length === 0; text: "League not found. Try its full competition name."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
             Text { text: "Favourite team (one team)"; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true }
             Text { text: root.favoriteTeam ? "Selected: " + root.favoriteTeam.name : "Search and select one team below."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
-            TextField { width: parent.width; placeholderText: "Search teams…"; text: root.teamSearchFilter; onTextChanged: root.teamSearchFilter = text }
+            TextField { width: parent.width; placeholderText: "Search team by name…"; text: root.teamSearchFilter
+              onTextChanged: { root.teamSearchFilter = text; root.teamSearchCompleted = ""; root.teamSearchTimer.restart() } }
             Rectangle {
               width: parent.width; height: Style.space(190); radius: Style.cornerRadius; clip: true
               color: Qt.rgba(0, 0, 0, 0.20); border.color: Qt.rgba(Commons.Color.muted.r, Commons.Color.muted.g, Commons.Color.muted.b, 0.25)
@@ -330,12 +548,7 @@ Panel {
                 Flow {
                   id: teamFlow; width: parent.width; spacing: Style.space(6)
                   Repeater {
-                    model: {
-                      var result = [], filter = root.teamSearchFilter.trim().toLowerCase()
-                      for (var i = 0; i < root.availableTeams.length; i++)
-                        if (!filter || root.availableTeams[i].name.toLowerCase().indexOf(filter) >= 0) result.push(root.availableTeams[i])
-                      return result
-                    }
+                    model: root.filteredTeams()
                     delegate: Button {
                       required property var modelData
                       text: modelData.name
@@ -346,13 +559,16 @@ Panel {
                   }
                 }
               }
+              Text { visible: root.isSearchingTeams; anchors.centerIn: parent; text: "Searching ESPN for teams…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
+              Text { visible: root.teamSearchFilter.trim().length >= 2 && root.teamSearchCompleted === root.teamSearchFilter.trim() && root.filteredTeams().length === 0 && !root.isSearchingTeams
+                anchors.centerIn: parent; text: "Team not found. Try the full team name."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
             }
             Button {
               text: root.remindersEnabled ? "Reminders: On" : "Reminders: Off"
               selected: root.remindersEnabled; bordered: true
               onClicked: { root.remindersEnabled = !root.remindersEnabled; root.persistSettings() }
             }
-            Text { text: "Match notifications appear before kickoff when desktop notifications are available."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
+            Text { text: "When enabled, a desktop notification is sent once before your favourite team’s next match. The default lead time is 15 minutes."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; wrapMode: Text.WordWrap }
           }
         }
       }
