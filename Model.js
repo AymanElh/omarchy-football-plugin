@@ -1,16 +1,53 @@
 .pragma library
 
 var leagues = [
-  { id: "esp.1", name: "La Liga", short: "LL" },
   { id: "eng.1", name: "Premier League", short: "PL" },
-  { id: "fra.1", name: "Ligue 1", short: "L1" },
-  { id: "ger.1", name: "Bundesliga", short: "BL" },
+  { id: "esp.1", name: "La Liga", short: "LL" },
   { id: "uefa.champions", name: "UEFA Champions League", short: "UCL" },
-  { id: "caf.champions", name: "CAF Champions League", short: "CAF CL" },
   { id: "ita.1", name: "Serie A", short: "SA" },
+  { id: "ger.1", name: "Bundesliga", short: "BL" },
+  { id: "fra.1", name: "Ligue 1", short: "L1" },
   { id: "uefa.europa", name: "Europa League", short: "UEL" },
-  { id: "esp.copa_del_rey", name: "Copa del Rey", short: "CDR" }
+  { id: "por.1", name: "Primeira Liga (Portugal)", short: "Portugal" },
+  { id: "ned.1", name: "Eredivisie (Netherlands)", short: "Eredivisie" },
+  { id: "tur.1", name: "Süper Lig (Türkiye)", short: "Süper Lig" },
+  { id: "esp.copa_del_rey", name: "Copa del Rey", short: "Copa del Rey" },
+  { id: "esp.super_cup", name: "Spanish Super Cup", short: "Super Cup" },
+  { id: "uefa.super_cup", name: "UEFA Super Cup", short: "UEFA Super Cup" },
+  { id: "fifa.cwc", name: "FIFA Club World Cup", short: "Club World Cup" },
+  { id: "fifa.world", name: "FIFA World Cup", short: "World Cup" },
+  { id: "conmebol.america", name: "Copa América", short: "Copa América" },
+  { id: "uefa.nations", name: "UEFA Nations League", short: "Nations" },
+  { id: "caf.nations", name: "Africa Cup of Nations", short: "AFCON" },
+  { id: "caf.champions", name: "CAF Champions League", short: "CAF CL" },
+  { id: "mar.1", name: "Botola Pro (Morocco)", short: "Botola" }
 ]
+
+var popularTeamTerms = [
+  "barcelona", "real madrid", "atletico madrid", "atlético madrid", "arsenal", "chelsea", "liverpool",
+  "manchester city", "manchester united", "tottenham", "bayern munich", "borussia dortmund",
+  "bayer leverkusen", "ac milan", "inter milan", "inter", "juventus", "napoli", "paris saint-germain",
+  "psg", "marseille", "lyon", "raja", "wydad", "inter miami"
+]
+
+function isPopularTeam(team) {
+  var name = String(team.name || "").toLowerCase()
+  var shortName = String(team.short || "").toLowerCase()
+  for (var i = 0; i < popularTeamTerms.length; i++)
+    if (name.indexOf(popularTeamTerms[i]) >= 0 || shortName.indexOf(popularTeamTerms[i]) >= 0) return true
+  return false
+}
+
+function matchesTeamSearch(team, query) {
+  var q = String(query || "").trim().toLowerCase()
+  var name = String(team.name || "").toLowerCase()
+  var shortName = String(team.short || "").toLowerCase()
+  if (!q || name.indexOf(q) >= 0 || shortName.indexOf(q) >= 0) return true
+  if (q === "wac" && name.indexOf("wydad") >= 0) return true
+  if (q === "wydad" && shortName.indexOf("wac") >= 0) return true
+  if (q === "inter miami" && (name.indexOf("miami") >= 0 || shortName.indexOf("miami") >= 0)) return true
+  return false
+}
 
 function defaultSelected() {
   return ["esp.1", "eng.1", "fra.1", "ger.1", "uefa.champions", "caf.champions"]
@@ -20,9 +57,8 @@ function selectedValues(value) {
   if (!value || !value.length) return defaultSelected()
   var out = []
   for (var i = 0; i < value.length; i++) {
-    for (var j = 0; j < leagues.length; j++) {
-      if (value[i] === leagues[j].id && out.indexOf(value[i]) < 0) out.push(value[i])
-    }
+    var id = String(value[i] || "")
+    if (id && out.indexOf(id) < 0) out.push(id)
   }
   return out.length ? out : defaultSelected()
 }
@@ -72,6 +108,11 @@ function formatDayLabel(date) {
   if (sameLocalDay(date, tomorrow)) return "Tomorrow (" + label + ")"
   if (sameLocalDay(date, yesterday)) return "Yesterday (" + label + ")"
   return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()] + ", " + label
+}
+
+function formatMonthLabel(date) {
+  var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+  return months[date.getMonth()] + " " + date.getFullYear()
 }
 
 function formatMatchTime(value) {
