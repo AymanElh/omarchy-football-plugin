@@ -48,6 +48,7 @@ Panel {
   property bool isLoadingMatches: false
   property bool isLoadingTeams: false
   property bool isLoadingNextMatch: false
+  property bool nextRefreshPending: false
   property string matchesError: ""
   readonly property bool opened: root.controller.open
 
@@ -116,16 +117,19 @@ Panel {
                          leagueId: team.leagueId || selectedLeagues[0] || "esp.1" }
     persistSettings(); fetchNextMatch(); fetchMatches()
   }
-  function clearFavoriteTeam() { favoriteTeam = null; matchScope = "day"; nextMatch = null; persistSettings(); updateLabel(); fetchMatches() }
+  function clearFavoriteTeam() { favoriteTeam = null; matchScope = "day"; nextMatch = null; persistSettings(); updateLabel(); fetchNextMatch(); fetchMatches() }
   function fetchNextMatch() {
-    if (!favoriteTeam || !favoriteTeam.id) { nextMatch = null; updateLabel(); return }
-    if (nextProc.running) return
+    if (nextProc.running) { nextRefreshPending = true; return }
+    if (!favoriteTeam || !favoriteTeam.id) { isLoadingNextMatch = false; nextMatch = null; updateLabel(); return }
     isLoadingNextMatch = true
     nextProc.command = ["python3", scriptPath, "next", String(favoriteTeam.id),
                         favoriteTeam.leagueId || "esp.1", selectedLeagues.join(",")]
     nextProc.running = true
   }
   function onNextMatchFinished(raw) {
+    if (nextRefreshPending) {
+      nextRefreshPending = false; isLoadingNextMatch = true; fetchNextMatch(); return
+    }
     isLoadingNextMatch = false
     try { var data = JSON.parse(raw); nextMatch = data && data.opponent ? data : null }
     catch (e) { nextMatch = null }
