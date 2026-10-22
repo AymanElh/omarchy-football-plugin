@@ -4,12 +4,15 @@ A native Omarchy bar widget for following selected football competitions and one
 
 ## Features
 
-- Default competitions: La Liga, Premier League, Ligue 1, Bundesliga, UEFA Champions League, and CAF Champions League.
+- Twenty popular competitions are shown first, sorted by popularity. Search matches competition names against ESPN's capped catalog; selecting a competition loads its teams for the favourite-team picker. Searches that return no match show an explicit not-found message.
 - One favourite team, with its next match shown in the bar.
-- Match list for the selected local calendar day, with live scores/status when supplied by the data source.
-- Date navigation, team search, favourite-match highlighting, and optional desktop reminders.
+- Match scopes for one selected day (with a direct calendar picker) or the next seven days, with each upcoming fixture showing its local date and kickoff time.
+- A dedicated favourite-team schedule with the next ten fixtures, filled from the team's schedule and upcoming league scoreboards when needed.
+- A league schedule view for configured competitions, showing the next 30 days of fixtures and round information when ESPN provides it.
+- The favourite-team picker shows popular clubs first; name search can look across popular leagues, MLS, and Morocco's Botola Pro, with explicit not-found feedback.
+- Favourite-match highlighting and optional desktop reminders.
 
-Kickoff timestamps are formatted in the computer's local timezone. The popup and favourite-team schedule refresh every two minutes. Match requests use only the selected competitions; the favourite-team lookup uses its competition plus the selected competitions. CAF Champions League is requested with ESPN's `caf.champions` identifier; availability may vary, so verify it on your system.
+Kickoff timestamps are formatted in the computer's local timezone. The bar's next-match summary refreshes every two minutes. Day schedules refresh every two minutes while the popup is open; the seven-day and favourite-team schedules refresh when opened or manually refreshed. Team search first filters loaded teams and searches the popular club-league catalog only when there are no matches. Reminders are one-time desktop notifications before the favourite team's next match (15 minutes by default). ESPN's competition coverage can vary by season.
 
 ## Files and technologies
 
@@ -36,4 +39,4 @@ Open **Football** in the bar, select competitions, and search for your favourite
 
 ## Before community publication
 
-Validate the manifest with `omarchy plugin validate ~/.config/omarchy/plugins/ayman.football`. Confirm the plugin loads on a clean supported Omarchy release; check competition coverage, empty/offline data, long names, local time display, and notifications; then add a license and follow the community repository's submission requirements.
+Validate the manifest with `omarchy plugin validate ~/.config/omarchy/plugins/ayman.football`. Confirm the plugin loads on a clean supported Omarchy release; check competition coverage, empty/offline data, long names, local time display, round availability, and notifications; then add a license and follow the community repository's submission requirements.
