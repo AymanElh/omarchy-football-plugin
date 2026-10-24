@@ -4,7 +4,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "community.football-matches"
+  moduleName: "ayman.football-matches"
 
   function injectPanel() {
     var target = panelLoader.item

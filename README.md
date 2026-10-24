@@ -28,15 +28,15 @@ QML runs inside Qt Quick/Quickshell. The UI launches `api.py` through Quickshell
 
 ## Install and enable
 
-Place this directory at `~/.config/omarchy/plugins/community.football-matches/`, then run:
+Place this directory at `~/.config/omarchy/plugins/ayman.football-matches/`, then run:
 
 ```sh
 omarchy-shell shell rescanPlugins
-omarchy plugin enable community.football-matches right
+omarchy plugin enable ayman.football-matches right
 ```
 
 Open **Football** in the bar, select competitions, and search for your favourite team. `notify-send` and a desktop notification service are needed for reminders.
 
 ## Before community publication
 
-Validate the manifest with `omarchy plugin validate ~/.config/omarchy/plugins/community.football-matches`. Confirm the plugin loads on a clean supported Omarchy release; check competition coverage, empty/offline data, long names, local time display, round availability, and notifications; then add a license and follow the community repository's submission requirements.
+Validate the manifest with `omarchy plugin validate ~/.config/omarchy/plugins/ayman.football-matches`. Confirm the plugin loads on a clean supported Omarchy release; check competition coverage, empty/offline data, long names, local time display, round availability, and notifications; then add a license and follow the community repository's submission requirements.

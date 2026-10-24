@@ -9,14 +9,17 @@ import "Model.js" as Model
 
 Panel {
   id: root
-  moduleName: "community.football-matches"
-  ipcTarget: "community.football-matches"
+  moduleName: "ayman.football-matches"
+  ipcTarget: "ayman.football-matches"
   manageIpc: false
 
   property var anchorItem: null
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
-  readonly property string scriptPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/community.football-matches/api.py"
+  readonly property string scriptPath: {
+    var p = Qt.resolvedUrl("api.py").toString().replace(/^file:\/\//, "")
+    return p !== "" ? p : (Quickshell.env("HOME") + "/.config/omarchy/plugins/" + root.moduleName + "/api.py")
+  }
 
   property var selectedLeagues: Model.selectedValues(setting("selectedLeagues", Model.defaultSelected()))
   property var favoriteTeam: setting("favoriteTeam", null)
@@ -110,6 +113,18 @@ Panel {
     teamSearchCompleted = ""
     persistSettings(); fetchTeams(); fetchMatches(); fetchNextMatch()
   }
+  function clearSelectedLeagues() {
+    selectedLeagues = []
+    leagueMatchesId = ""
+    teamSearchCompleted = ""
+    persistSettings()
+    fetchTeams()
+    matches = []
+    matchesError = ""
+    if (matchesProc.running) matchesRefreshPending = true
+    else fetchMatches()
+    fetchNextMatch()
+  }
   function isLeagueSelected(id) { return selectedLeagues.indexOf(id) >= 0 }
   function selectFavoriteTeam(team) {
     if (favoriteTeam && String(favoriteTeam.id) === String(team.id)) { favoriteTeam = null; nextMatch = null; matchScope = "day" }
@@ -146,6 +161,10 @@ Panel {
     fetchMatches()
   }
   function fetchMatches() {
+    if ((matchScope === "day" || matchScope === "upcoming") && selectedLeagues.length === 0) {
+      matches = []; matchesError = ""; isLoadingMatches = false
+      return
+    }
     if (matchesProc.running) { matchesRefreshPending = true; return }
     isLoadingMatches = true; matchesError = ""
     var leagues = selectedLeagues.slice(0)
@@ -373,13 +392,13 @@ Panel {
                 }
               }
             }
-            Flow {
+            Row {
               width: parent.width
               spacing: Style.space(6)
-              Button { text: "By day"; selected: root.matchScope === "day"; bordered: true; onClicked: root.setMatchScope("day") }
-              Button { text: "Next 7 days"; selected: root.matchScope === "upcoming"; bordered: true; onClicked: root.setMatchScope("upcoming") }
-              Button { text: root.favoriteTeam ? (root.favoriteTeam.short || root.favoriteTeam.name) + " · Next 10" : "Favourite · Next 10"; enabled: !!root.favoriteTeam; selected: root.matchScope === "team"; bordered: true; onClicked: root.setMatchScope("team") }
-              Button { text: "By league"; selected: root.matchScope === "league"; bordered: true; onClicked: root.setMatchScope("league") }
+              Button { width: (parent.width - parent.spacing * 3) / 4; text: "By day"; selected: root.matchScope === "day"; bordered: true; onClicked: root.setMatchScope("day") }
+              Button { width: (parent.width - parent.spacing * 3) / 4; text: "Next 7 days"; selected: root.matchScope === "upcoming"; bordered: true; onClicked: root.setMatchScope("upcoming") }
+              Button { width: (parent.width - parent.spacing * 3) / 4; text: root.favoriteTeam ? "By team" : "Favourite"; enabled: !!root.favoriteTeam; selected: root.matchScope === "team"; bordered: true; onClicked: root.setMatchScope("team") }
+              Button { width: (parent.width - parent.spacing * 3) / 4; text: "By league"; selected: root.matchScope === "league"; bordered: true; onClicked: root.setMatchScope("league") }
             }
             QQC.ComboBox {
               visible: root.matchScope === "league"
@@ -519,8 +538,23 @@ Panel {
             spacing: Style.space(12)
             Text { text: "Favourite leagues"; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true }
             Text { text: "Popular competitions are ready immediately. Search to find others; teams follow your selected leagues."; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; wrapMode: Text.WordWrap }
-            TextField { width: parent.width; placeholderText: "Search leagues by name…"; text: root.leagueSearchFilter
-              onTextChanged: { root.leagueSearchFilter = text; root.leagueSearchCompleted = ""; root.leagueSearchTimer.restart() } }
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+              TextField {
+                width: parent.width - clearLeaguesButton.implicitWidth - parent.spacing
+                placeholderText: "Search leagues by name…"
+                text: root.leagueSearchFilter
+                onTextChanged: { root.leagueSearchFilter = text; root.leagueSearchCompleted = ""; root.leagueSearchTimer.restart() }
+              }
+              Button {
+                id: clearLeaguesButton
+                text: "Clear"
+                bordered: true
+                enabled: root.selectedLeagues.length > 0
+                onClicked: root.clearSelectedLeagues()
+              }
+            }
             Text { visible: root.isLoadingLeagues; text: "Searching leagues…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall }
             Flow {
               width: parent.width

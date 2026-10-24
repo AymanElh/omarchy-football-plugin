@@ -37,6 +37,8 @@ TEAM_SEARCH_LEAGUES = [
     "uefa.europa", "caf.champions", "mar.1", "usa.1",
 ]
 TEAM_ALIASES = {
+    "barca": ("barcelona",), "barça": ("barcelona",),
+    "real": ("real madrid",),
     "wac": ("wydad",), "wydad": ("wac",),
     "raja": ("raja casablanca",), "inter miami": ("inter miami",),
 }
