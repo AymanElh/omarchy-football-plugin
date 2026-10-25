@@ -46,6 +46,11 @@ Panel {
   property bool isLoadingLeagues: false
   property string matchScope: "day"
   property string leagueMatchesId: selectedLeagues.length ? selectedLeagues[0] : ""
+  property var standings: []
+  property string standingsLeagueId: selectedLeagues.length ? selectedLeagues[0] : "esp.1"
+  property bool isLoadingStandings: false
+  property bool standingsRefreshPending: false
+  property string standingsError: ""
   property bool matchesRefreshPending: false
   property bool teamsRefreshPending: false
   property bool isLoadingMatches: false
@@ -76,7 +81,12 @@ Panel {
     if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function")
       bar.shell.updateEntryInline(moduleName, entry)
   }
-  function refreshAll() { fetchNextMatch(); fetchMatches(); if (showingSettings || availableTeams.length === 0) fetchTeams() }
+  function refreshAll() {
+    fetchNextMatch()
+    if (matchScope === "table") fetchStandings()
+    else fetchMatches()
+    if (showingSettings || availableTeams.length === 0) fetchTeams()
+  }
   function filteredLeagues() {
     var q = leagueSearchFilter.trim().toLowerCase(), result = [], seen = {}
     var all = q ? Model.leagues.concat(discoveredLeagues) : Model.leagues
@@ -110,19 +120,26 @@ Panel {
     if (next.length === 0) next = [id]
     selectedLeagues = next
     if (selectedLeagues.indexOf(leagueMatchesId) < 0) leagueMatchesId = selectedLeagues[0]
+    if (selectedLeagues.indexOf(standingsLeagueId) < 0) standingsLeagueId = selectedLeagues[0]
     teamSearchCompleted = ""
-    persistSettings(); fetchTeams(); fetchMatches(); fetchNextMatch()
+    persistSettings(); fetchTeams(); if (matchScope === "table") fetchStandings(); else fetchMatches(); fetchNextMatch()
   }
   function clearSelectedLeagues() {
     selectedLeagues = []
     leagueMatchesId = ""
+    standingsLeagueId = ""
     teamSearchCompleted = ""
     persistSettings()
     fetchTeams()
     matches = []
     matchesError = ""
-    if (matchesProc.running) matchesRefreshPending = true
-    else fetchMatches()
+    standings = []
+    standingsError = ""
+    if (matchScope === "table") fetchStandings()
+    else {
+      if (matchesProc.running) matchesRefreshPending = true
+      else fetchMatches()
+    }
     fetchNextMatch()
   }
   function isLeagueSelected(id) { return selectedLeagues.indexOf(id) >= 0 }
@@ -152,13 +169,49 @@ Panel {
   }
   function updateLabel() { label = Model.formatBarLabel(nextMatch, favoriteTeam) }
   function setMatchScope(scope) {
-    matchScope = scope; matches = []; matchesError = ""; isLoadingMatches = true
-    fetchMatches()
+    matchScope = scope
+    if (scope === "table") {
+      standings = []
+      standingsError = ""
+      fetchStandings()
+    } else {
+      matches = []
+      matchesError = ""
+      isLoadingMatches = true
+      fetchMatches()
+    }
   }
   function selectLeagueMatches(id) {
     if (!id || id === leagueMatchesId) return
     leagueMatchesId = id; matches = []; matchesError = ""; isLoadingMatches = true
     fetchMatches()
+  }
+  function selectStandingsLeague(id) {
+    if (!id || id === standingsLeagueId) return
+    standingsLeagueId = id; standings = []; standingsError = ""; isLoadingStandings = true
+    fetchStandings()
+  }
+  function fetchStandings() {
+    if (!standingsLeagueId && selectedLeagues.length) standingsLeagueId = selectedLeagues[0]
+    if (!standingsLeagueId) { standings = []; isLoadingStandings = false; return }
+    if (standingsProc.running) { standingsRefreshPending = true; return }
+    isLoadingStandings = true; standingsError = ""
+    standingsProc.command = ["python3", scriptPath, "standings", standingsLeagueId]
+    standingsProc.running = true
+  }
+  function onStandingsFinished(raw) {
+    if (standingsRefreshPending) {
+      standingsRefreshPending = false; isLoadingStandings = true; fetchStandings(); return
+    }
+    isLoadingStandings = false
+    try {
+      var data = JSON.parse(raw)
+      standings = Array.isArray(data) ? data : []
+      if (standings.length === 0) standingsError = "No standings available for this competition"
+    } catch (e) {
+      standings = []
+      standingsError = "Could not read standings data"
+    }
   }
   function fetchMatches() {
     if ((matchScope === "day" || matchScope === "upcoming") && selectedLeagues.length === 0) {
@@ -297,10 +350,19 @@ Panel {
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onLeaguesFinished(String(text || "").trim()) }
   }
   Timer { id: leagueSearchTimer; interval: 400; repeat: false; onTriggered: root.searchLeagues() }
+  Process { id: standingsProc
+    stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.onStandingsFinished(String(text || "").trim()) }
+  }
   Process { id: reminderProc }
   Timer {
     interval: 120000; running: true; repeat: true
-    onTriggered: { root.fetchNextMatch(); if (root.opened && root.matchScope === "day") root.fetchMatches() }
+    onTriggered: {
+      root.fetchNextMatch()
+      if (root.opened) {
+        if (root.matchScope === "table") root.fetchStandings()
+        else if (root.matchScope === "day") root.fetchMatches()
+      }
+    }
   }
   Timer { interval: 60000; running: true; repeat: true; onTriggered: { root.updateLabel(); root.checkReminder() } }
   Component.onCompleted: { fetchNextMatch(); fetchMatches() }
@@ -366,23 +428,88 @@ Panel {
                 id: favColumn
                 anchors.fill: parent
                 anchors.margins: Style.space(10)
-                spacing: Style.space(5)
+                spacing: Style.space(6)
                 Text {
                   width: parent.width
                   text: root.favoriteTeam ? root.favoriteTeam.name + " · Next match" : "Choose a favourite team in Settings"
                   color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true
                 }
-                Text {
+                Row {
                   width: parent.width
                   visible: root.nextMatch !== null
-                  text: root.nextMatch ? root.nextMatch.homeName + " vs " + root.nextMatch.awayName : ""
-                  color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading; font.bold: true
+                  spacing: Style.space(6)
+
+                  Row {
+                    width: (parent.width - heroScore.width - Style.space(12)) / 2
+                    spacing: Style.space(6)
+                    anchors.verticalCenter: parent.verticalCenter
+                    Image {
+                      source: (root.nextMatch && root.nextMatch.homeLogo) ? root.nextMatch.homeLogo : ""
+                      width: Style.space(22); height: Style.space(22)
+                      fillMode: Image.PreserveAspectFit
+                      asynchronous: true
+                      visible: source != ""
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                      width: parent.width - ((root.nextMatch && root.nextMatch.homeLogo) ? Style.space(28) : 0)
+                      text: root.nextMatch ? root.nextMatch.homeName : ""
+                      color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading; font.bold: true
+                      elide: Text.ElideRight
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                  }
+
+                  Text {
+                    id: heroScore; width: Style.space(50)
+                    text: root.nextMatch ? (root.nextMatch.state === "pre" ? "vs" : root.nextMatch.homeScore + " - " + root.nextMatch.awayScore) : ""
+                    color: (root.nextMatch && root.nextMatch.state === "in") ? Commons.Color.urgent : Commons.Color.foreground
+                    font.family: Style.font.family; font.pixelSize: Style.font.heading; font.bold: true
+                    horizontalAlignment: Text.AlignHCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  Row {
+                    width: (parent.width - heroScore.width - Style.space(12)) / 2
+                    spacing: Style.space(6)
+                    layoutDirection: Qt.RightToLeft
+                    anchors.verticalCenter: parent.verticalCenter
+                    Image {
+                      source: (root.nextMatch && root.nextMatch.awayLogo) ? root.nextMatch.awayLogo : ""
+                      width: Style.space(22); height: Style.space(22)
+                      fillMode: Image.PreserveAspectFit
+                      asynchronous: true
+                      visible: source != ""
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                      width: parent.width - ((root.nextMatch && root.nextMatch.awayLogo) ? Style.space(28) : 0)
+                      text: root.nextMatch ? root.nextMatch.awayName : ""
+                      color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading; font.bold: true
+                      elide: Text.ElideRight; horizontalAlignment: Text.AlignRight
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                  }
                 }
-                Text {
+                Row {
                   width: parent.width
                   visible: root.nextMatch !== null
-                  text: root.nextMatch ? root.nextMatch.league + (root.nextMatch.round ? " · " + root.nextMatch.round : "") + " · " + Model.formatDayLabel(new Date(root.nextMatch.date)) + " at " + Model.formatMatchTime(root.nextMatch.date) : ""
-                  color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+                  spacing: Style.space(6)
+                  Image {
+                    source: (root.nextMatch && root.nextMatch.leagueLogo) ? root.nextMatch.leagueLogo : ""
+                    width: Style.space(16); height: Style.space(16)
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    visible: source != ""
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                  Text {
+                    width: parent.width - ((root.nextMatch && root.nextMatch.leagueLogo) ? Style.space(22) : 0)
+                    text: root.nextMatch ? root.nextMatch.league + (root.nextMatch.round ? " · " + root.nextMatch.round : "") + " · " + Model.formatDayLabel(new Date(root.nextMatch.date)) + " at " + Model.formatMatchTime(root.nextMatch.date) : ""
+                    color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+                    elide: Text.ElideRight
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
                 }
                 Text {
                   width: parent.width
@@ -395,10 +522,11 @@ Panel {
             Row {
               width: parent.width
               spacing: Style.space(6)
-              Button { width: (parent.width - parent.spacing * 3) / 4; text: "By day"; selected: root.matchScope === "day"; bordered: true; onClicked: root.setMatchScope("day") }
-              Button { width: (parent.width - parent.spacing * 3) / 4; text: "Next 7 days"; selected: root.matchScope === "upcoming"; bordered: true; onClicked: root.setMatchScope("upcoming") }
-              Button { width: (parent.width - parent.spacing * 3) / 4; text: root.favoriteTeam ? "By team" : "Favourite"; enabled: !!root.favoriteTeam; selected: root.matchScope === "team"; bordered: true; onClicked: root.setMatchScope("team") }
-              Button { width: (parent.width - parent.spacing * 3) / 4; text: "By league"; selected: root.matchScope === "league"; bordered: true; onClicked: root.setMatchScope("league") }
+              Button { width: (parent.width - parent.spacing * 4) / 5; text: "Day"; selected: root.matchScope === "day"; bordered: true; onClicked: root.setMatchScope("day") }
+              Button { width: (parent.width - parent.spacing * 4) / 5; text: "7 Days"; selected: root.matchScope === "upcoming"; bordered: true; onClicked: root.setMatchScope("upcoming") }
+              Button { width: (parent.width - parent.spacing * 4) / 5; text: "Table"; selected: root.matchScope === "table"; bordered: true; onClicked: root.setMatchScope("table") }
+              Button { width: (parent.width - parent.spacing * 4) / 5; text: root.favoriteTeam ? "Team" : "Fav"; enabled: !!root.favoriteTeam; selected: root.matchScope === "team"; bordered: true; onClicked: root.setMatchScope("team") }
+              Button { width: (parent.width - parent.spacing * 4) / 5; text: "League"; selected: root.matchScope === "league"; bordered: true; onClicked: root.setMatchScope("league") }
             }
             QQC.ComboBox {
               visible: root.matchScope === "league"
@@ -411,6 +539,162 @@ Panel {
               visible: root.matchScope === "league"
               text: "Scheduled matches over the next 30 days"
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+            }
+
+            Column {
+              visible: root.matchScope === "table"
+              width: parent.width
+              spacing: Style.space(8)
+
+              QQC.ComboBox {
+                width: parent.width
+                model: root.selectedLeagues.map(function(id) { return Model.leagueName(id) })
+                currentIndex: Math.max(0, root.selectedLeagues.indexOf(root.standingsLeagueId))
+                onActivated: function(index) { root.selectStandingsLeague(root.selectedLeagues[index]) }
+              }
+
+              Text {
+                visible: root.isLoadingStandings
+                text: "Loading standings…"
+                color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+              }
+
+              Text {
+                visible: !root.isLoadingStandings && root.standings.length === 0
+                text: root.standingsError || "No standings available for this competition."
+                color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+              }
+
+              Rectangle {
+                visible: !root.isLoadingStandings && root.standings.length > 0
+                width: parent.width
+                implicitHeight: tableColumn.implicitHeight + Style.space(12)
+                radius: Style.cornerRadius
+                color: Qt.rgba(Commons.Color.menu.r, Commons.Color.menu.g, Commons.Color.menu.b, 0.70)
+                border.width: 1
+                border.color: Qt.rgba(Commons.Color.muted.r, Commons.Color.muted.g, Commons.Color.muted.b, 0.25)
+
+                Column {
+                  id: tableColumn
+                  anchors.fill: parent
+                  anchors.margins: Style.space(6)
+                  spacing: Style.space(2)
+
+                  Rectangle {
+                    width: parent.width
+                    height: Style.space(26)
+                    radius: Style.cornerRadius
+                    color: Qt.rgba(Commons.Color.foreground.r, Commons.Color.foreground.g, Commons.Color.foreground.b, 0.05)
+                    Row {
+                      anchors.fill: parent
+                      anchors.leftMargin: Style.space(6)
+                      anchors.rightMargin: Style.space(6)
+                      spacing: Style.space(4)
+
+                      Text { width: Style.space(24); text: "#"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: parent.width - Style.space(24 + 28*4 + 36 + 36 + 24); text: "Club"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "P"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "W"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "D"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "L"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(36); text: "GD"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(36); text: "PTS"; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                  }
+
+                  Repeater {
+                    model: root.standings
+                    delegate: Column {
+                      required property var modelData
+                      required property int index
+                      width: tableColumn.width
+                      spacing: Style.space(2)
+
+                      Rectangle {
+                        visible: !!modelData.group && (index === 0 || root.standings[index - 1].group !== modelData.group)
+                        width: parent.width
+                        height: Style.space(22)
+                        color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.12)
+                        radius: Style.cornerRadius
+                        Text {
+                          anchors.centerIn: parent
+                          text: modelData.group
+                          color: Commons.Color.accent
+                          font.family: Style.font.family
+                          font.pixelSize: Style.font.caption
+                          font.bold: true
+                        }
+                      }
+
+                      Rectangle {
+                        readonly property bool isFav: root.favoriteTeam && String(root.favoriteTeam.id) === String(modelData.teamId)
+                        readonly property int rankNum: parseInt(modelData.rank) || (index + 1)
+                        readonly property bool isUclZone: rankNum <= 4
+                        width: parent.width
+                        height: Style.space(28)
+                        radius: Style.cornerRadius
+                        color: isFav ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.20) : (index % 2 === 1 ? Qt.rgba(Commons.Color.foreground.r, Commons.Color.foreground.g, Commons.Color.foreground.b, 0.03) : "transparent")
+                        border.width: isFav ? 1 : 0
+                        border.color: Commons.Color.accent
+
+                        Row {
+                          anchors.fill: parent
+                          anchors.leftMargin: Style.space(6)
+                          anchors.rightMargin: Style.space(6)
+                          spacing: Style.space(4)
+
+                          Text {
+                            width: Style.space(24)
+                            text: modelData.rank
+                            color: isFav ? Commons.Color.accent : (isUclZone ? Commons.Color.foreground : Commons.Color.muted)
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.bodySmall
+                            font.bold: isFav || isUclZone
+                            horizontalAlignment: Text.AlignHCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                          }
+
+                          Row {
+                            width: parent.width - Style.space(24 + 28*4 + 36 + 36 + 24)
+                            spacing: Style.space(6)
+                            anchors.verticalCenter: parent.verticalCenter
+                            Image {
+                              source: modelData.logo || ""
+                              width: Style.space(16); height: Style.space(16)
+                              fillMode: Image.PreserveAspectFit
+                              asynchronous: true
+                              visible: source != ""
+                              anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                              width: parent.width - (modelData.logo ? Style.space(22) : 0)
+                              text: modelData.short || modelData.name
+                              color: isFav ? Commons.Color.accent : Commons.Color.foreground
+                              font.family: Style.font.family
+                              font.pixelSize: Style.font.bodySmall
+                              font.bold: isFav
+                              elide: Text.ElideRight
+                              anchors.verticalCenter: parent.verticalCenter
+                            }
+                          }
+
+                          Text { width: Style.space(28); text: modelData.played; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.wins; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.ties; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.losses; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text {
+                            width: Style.space(36); text: modelData.gd
+                            color: modelData.gd.indexOf("+") === 0 ? Commons.Color.accent : (modelData.gd.indexOf("-") === 0 ? Commons.Color.urgent : Commons.Color.muted)
+                            font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+                            horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter
+                          }
+                          Text { width: Style.space(36); text: modelData.points; color: isFav ? Commons.Color.accent : Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
             Row {
               visible: root.matchScope === "day"
@@ -469,15 +753,17 @@ Panel {
                 }
               }
             }
-            Text { visible: root.isLoadingMatches; text: "Loading matches…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
+            Text { visible: root.matchScope !== "table" && root.isLoadingMatches; text: "Loading matches…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
             Text {
-              visible: !root.isLoadingMatches && root.matches.length === 0
+              visible: root.matchScope !== "table" && !root.isLoadingMatches && root.matches.length === 0
               text: root.matchesError || (root.matchScope === "team" ? "No upcoming matches were found for " + (root.favoriteTeam ? root.favoriteTeam.name : "your favourite team") + "." : root.matchScope === "upcoming" ? "No upcoming matches in the next seven days." : root.matchScope === "league" ? "No scheduled matches were found for this league in the next 30 days." : "No matches found for this day in the selected leagues.")
               color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
-            Repeater {
-              model: root.matches
-              delegate: Rectangle {
+
+            Component {
+              id: matchCardComponent
+              Rectangle {
+                id: cardRect
                 required property var modelData
                 readonly property bool favourite: root.isFavTeamMatch(modelData)
                 width: mainColumn.width
@@ -497,6 +783,7 @@ Panel {
                     id: matchMetaRow
                     Rectangle {
                       id: leaguePill
+                      visible: root.matchScope !== "day"
                       width: Math.min(leagueText.implicitWidth + Style.space(14), parent.width * 0.55)
                       height: leagueText.implicitHeight + Style.space(8); radius: Style.cornerRadius
                       color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.13)
@@ -504,7 +791,7 @@ Panel {
                       Text { id: leagueText; anchors.centerIn: parent; width: parent.width - Style.space(10); text: modelData.league + (modelData.round ? " · " + modelData.round : ""); elide: Text.ElideRight
                         color: Commons.Color.accent; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
                     }
-                    Item { width: Math.max(0, matchMetaRow.width - leaguePill.width - matchTimePill.width - Style.space(16)); height: 1 }
+                    Item { width: Math.max(0, matchMetaRow.width - (leaguePill.visible ? leaguePill.width : 0) - matchTimePill.width - Style.space(16)); height: 1 }
                     Rectangle {
                       id: matchTimePill
                       readonly property bool live: modelData.state === "in"
@@ -520,15 +807,130 @@ Panel {
                   }
                   Row {
                     width: parent.width
-                    Text { width: (parent.width - score.width - Style.space(12)) / 2; text: modelData.home; color: Commons.Color.foreground
-                      font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight }
+                    spacing: Style.space(6)
+
+                    Row {
+                      width: (parent.width - score.width - Style.space(12)) / 2
+                      spacing: Style.space(6)
+                      anchors.verticalCenter: parent.verticalCenter
+                      Image {
+                        source: modelData.homeLogo || ""
+                        width: Style.space(20); height: Style.space(20)
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        visible: source != ""
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                      Text {
+                        width: parent.width - ((modelData.homeLogo && modelData.homeLogo !== "") ? Style.space(26) : 0)
+                        text: modelData.home; color: Commons.Color.foreground
+                        font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+
                     Text { id: score; width: Style.space(60); text: modelData.state === "pre" ? "vs" : modelData.homeScore + " - " + modelData.awayScore
-                      color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.body; horizontalAlignment: Text.AlignHCenter }
-                    Text { width: (parent.width - score.width - Style.space(12)) / 2; text: modelData.away; color: Commons.Color.foreground
-                      font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight; horizontalAlignment: Text.AlignRight }
+                      color: (modelData.state === "in") ? Commons.Color.urgent : Commons.Color.foreground
+                      font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: modelData.state !== "pre"
+                      horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+
+                    Row {
+                      width: (parent.width - score.width - Style.space(12)) / 2
+                      spacing: Style.space(6)
+                      layoutDirection: Qt.RightToLeft
+                      anchors.verticalCenter: parent.verticalCenter
+                      Image {
+                        source: modelData.awayLogo || ""
+                        width: Style.space(20); height: Style.space(20)
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        visible: source != ""
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                      Text {
+                        width: parent.width - ((modelData.awayLogo && modelData.awayLogo !== "") ? Style.space(26) : 0)
+                        text: modelData.away; color: Commons.Color.foreground
+                        font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight
+                        horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
                   }
                 }
               }
+            }
+
+            Repeater {
+              model: root.matchScope === "day" ? Model.groupMatchesByLeague(root.matches, root.selectedLeagues) : []
+              delegate: Column {
+                required property var modelData
+                width: mainColumn.width
+                spacing: Style.space(6)
+
+                Rectangle {
+                  width: parent.width
+                  height: Style.space(32)
+                  radius: Style.cornerRadius
+                  color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.08)
+                  border.width: 1
+                  border.color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.25)
+                  Row {
+                    anchors.fill: parent
+                    anchors.leftMargin: Style.space(8)
+                    anchors.rightMargin: Style.space(8)
+                    spacing: Style.space(8)
+                    Image {
+                      id: grpLeagueLogo
+                      source: modelData.leagueLogo || Model.leagueLogo(modelData.leagueId)
+                      width: Style.space(20); height: Style.space(20)
+                      fillMode: Image.PreserveAspectFit
+                      asynchronous: true
+                      visible: source != ""
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                      text: modelData.leagueName
+                      color: Commons.Color.foreground
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                      elide: Text.ElideRight
+                      width: parent.width - (grpLeagueLogo.visible ? Style.space(28) : 0) - badgeRect.width - Style.space(16)
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Rectangle {
+                      id: badgeRect
+                      height: badgeText.implicitHeight + Style.space(4)
+                      width: badgeText.implicitWidth + Style.space(10)
+                      radius: Style.cornerRadius
+                      color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.15)
+                      anchors.verticalCenter: parent.verticalCenter
+                      Text {
+                        id: badgeText
+                        anchors.centerIn: parent
+                        text: modelData.matches.length + (modelData.matches.length === 1 ? " match" : " matches")
+                        color: Commons.Color.accent
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                      }
+                    }
+                  }
+                }
+
+                Column {
+                  width: parent.width
+                  spacing: Style.space(6)
+                  Repeater {
+                    model: modelData.matches
+                    delegate: matchCardComponent
+                  }
+                }
+              }
+            }
+
+            Repeater {
+              model: (root.matchScope === "upcoming" || root.matchScope === "team" || root.matchScope === "league") ? root.matches : []
+              delegate: matchCardComponent
             }
           }
 

@@ -10,7 +10,26 @@ from datetime import datetime, timedelta, timezone
 
 BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 CORE_BASE = "https://sports.core.api.espn.com/v2/sports/soccer"
+STANDINGS_BASE = "https://site.api.espn.com/apis/v2/sports/soccer"
 HEADERS = {"User-Agent": "AymanFootballWidget/1.0 (Linux)"}
+KNOWN_LEAGUE_LOGOS = {
+    "esp.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png",
+    "eng.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png",
+    "uefa.champions": "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png",
+    "ita.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png",
+    "ger.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png",
+    "fra.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png",
+    "uefa.europa": "https://a.espncdn.com/i/leaguelogos/soccer/500/2254.png",
+    "uefa.europa.conf": "https://a.espncdn.com/i/leaguelogos/soccer/500/20349.png",
+    "por.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png",
+    "ned.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png",
+    "tur.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png",
+    "caf.champions": "https://a.espncdn.com/i/leaguelogos/soccer/500/2391.png",
+    "caf.nations": "https://a.espncdn.com/i/leaguelogos/soccer/500/2390.png",
+    "fifa.cwc": "https://a.espncdn.com/i/leaguelogos/soccer/500/20.png",
+    "fifa.world": "https://a.espncdn.com/i/leaguelogos/soccer/500/4.png",
+    "usa.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/19.png",
+}
 LEAGUES = {
     "esp.1": "La Liga", "eng.1": "Premier League", "fra.1": "Ligue 1",
     "ger.1": "Bundesliga", "ita.1": "Serie A", "uefa.champions": "UEFA Champions League",
@@ -58,6 +77,33 @@ TEAM_COMPETITIONS = {
 
 def display_league_name(league):
     return LEAGUES.get(league, league.replace(".", " ").replace("_", " ").title())
+
+
+def extract_team_logo(team):
+    if not team or not isinstance(team, dict):
+        return ""
+    if team.get("logo"):
+        return team["logo"]
+    logos = team.get("logos") or []
+    if isinstance(logos, list) and logos and isinstance(logos[0], dict):
+        return logos[0].get("href", "")
+    return ""
+
+
+def extract_league_logo(league_id, event=None, scoreboard_data=None):
+    if scoreboard_data and scoreboard_data.get("leagues"):
+        logos = scoreboard_data["leagues"][0].get("logos") or []
+        if logos and isinstance(logos, list) and isinstance(logos[0], dict):
+            href = logos[0].get("href")
+            if href:
+                return href
+    if event and isinstance(event.get("league"), dict):
+        logos = event["league"].get("logos") or []
+        if logos and isinstance(logos, list) and isinstance(logos[0], dict):
+            href = logos[0].get("href")
+            if href:
+                return href
+    return KNOWN_LEAGUE_LOGOS.get(league_id, "")
 
 
 def cmd_leagues(limit):
@@ -172,9 +218,13 @@ def cmd_next(team_id, primary_league, selected_leagues):
                 "opponent": opponent_name,
                 "homeName": home_team.get("shortDisplayName") or home_team.get("displayName") or "Home",
                 "awayName": away_team.get("shortDisplayName") or away_team.get("displayName") or "Away",
+                "homeLogo": extract_team_logo(home_team),
+                "awayLogo": extract_team_logo(away_team),
                 "homeScore": home.get("score", ""), "awayScore": away.get("score", ""),
                 "league": event.get("league", {}).get("name") or display_league_name(league),
-                "leagueId": league, "venue": competition.get("venue", {}).get("fullName", ""),
+                "leagueId": league,
+                "leagueLogo": extract_league_logo(league, event=event),
+                "venue": competition.get("venue", {}).get("fullName", ""),
                 "round": event_round(event, competition),
             }))
             if event_id:
@@ -250,22 +300,29 @@ def cmd_team_matches(team_id, primary_league, selected_leagues, limit=10):
                 home_id, away_id = str(event.get("homeId", "")), str(event.get("awayId", ""))
                 home_name, away_name = event.get("home", "?"), event.get("away", "?")
                 home_score, away_score = event.get("homeScore", ""), event.get("awayScore", "")
+                home_logo, away_logo = event.get("homeLogo", ""), event.get("awayLogo", "")
+                league_logo = event.get("leagueLogo", "") or extract_league_logo(league)
             else:
                 home, away, home_team, away_team = competitors_for(competitors)
                 home_id, away_id = str(home_team.get("id", "")), str(away_team.get("id", ""))
                 home_name = home_team.get("shortDisplayName") or home_team.get("displayName") or "?"
                 away_name = away_team.get("shortDisplayName") or away_team.get("displayName") or "?"
                 home_score, away_score = home.get("score", ""), away.get("score", "")
+                home_logo = extract_team_logo(home_team)
+                away_logo = extract_team_logo(away_team)
+                league_logo = extract_league_logo(league, event=event)
             if str(team_id) not in (home_id, away_id):
                 continue
             candidates.append((date, {
                 "id": event_id, "leagueId": league,
                 "league": (event.get("league", {}).get("name") if isinstance(event.get("league"), dict) else event.get("league")) or display_league_name(league),
+                "leagueLogo": league_logo,
                 "date": date_text, "state": state,
                 "detail": event.get("detail") or status.get("shortDetail") or status.get("detail") or "Scheduled",
                 "round": event.get("round") or event_round(event, competition),
                 "homeId": home_id, "awayId": away_id,
                 "home": home_name, "away": away_name,
+                "homeLogo": home_logo, "awayLogo": away_logo,
                 "homeScore": home_score, "awayScore": away_score,
             }))
             if event_id:
@@ -297,12 +354,17 @@ def fetch_scoreboard(league, date_text):
     if not data:
         return []
     result = []
+    league_info = (data.get("leagues") or [{}])[0]
+    league_name = league_info.get("name") or display_league_name(league)
+    league_logo = extract_league_logo(league, scoreboard_data=data)
+
     for event in data.get("events", []):
         competition, competitors, status = event_parts(event)
         home, away, home_team, away_team = competitors_for(competitors)
         result.append({
             "id": str(event.get("id", "")), "leagueId": league,
-            "league": event.get("league", {}).get("name") or display_league_name(league),
+            "league": event.get("league", {}).get("name") or league_name,
+            "leagueLogo": extract_league_logo(league, event=event) or league_logo,
             "date": event.get("date") or competition.get("date"),
             "state": status.get("state", "pre"),
             "detail": status.get("shortDetail") or status.get("detail") or "",
@@ -310,6 +372,8 @@ def fetch_scoreboard(league, date_text):
             "homeId": str(home_team.get("id", "")), "awayId": str(away_team.get("id", "")),
             "home": home_team.get("shortDisplayName") or home_team.get("displayName") or "?",
             "away": away_team.get("shortDisplayName") or away_team.get("displayName") or "?",
+            "homeLogo": extract_team_logo(home_team),
+            "awayLogo": extract_team_logo(away_team),
             "homeScore": home.get("score", ""), "awayScore": away.get("score", ""),
         })
     return result
@@ -386,6 +450,7 @@ def fetch_teams(league, limit=100):
         if team_id and name:
             output.append({"id": team_id, "name": name,
                            "short": team.get("shortDisplayName") or name,
+                           "logo": extract_team_logo(team),
                            "leagueId": league, "league": display_league_name(league)})
     return output
 
@@ -420,6 +485,58 @@ def cmd_search_teams(leagues, query):
     print(json.dumps(sorted(by_id.values(), key=lambda team: team["name"].casefold())))
 
 
+def fetch_standings(league):
+    if not league:
+        return []
+    data = fetch_json(f"{STANDINGS_BASE}/{league}/standings")
+    if not data:
+        return []
+
+    entries_with_groups = []
+    children = data.get("children", [])
+    if children:
+        has_multiple_groups = len(children) > 1
+        for child in children:
+            group_name = child.get("name", "") if has_multiple_groups else ""
+            for entry in child.get("standings", {}).get("entries", []):
+                entries_with_groups.append((group_name, entry))
+    elif "standings" in data:
+        for entry in data.get("standings", {}).get("entries", []):
+            entries_with_groups.append(("", entry))
+
+    output = []
+    for idx, (group_name, entry) in enumerate(entries_with_groups):
+        team = entry.get("team", {})
+        team_id = str(team.get("id", ""))
+        name = team.get("displayName") or team.get("name") or "?"
+        short = team.get("shortDisplayName") or team.get("abbreviation") or name
+        logo = extract_team_logo(team)
+        stats = {s.get("name"): s.get("displayValue", "") for s in entry.get("stats", [])}
+
+        output.append({
+            "rank": str(stats.get("rank") or (idx + 1)),
+            "teamId": team_id,
+            "name": name,
+            "short": short,
+            "logo": logo,
+            "group": group_name,
+            "played": str(stats.get("gamesPlayed", "0")),
+            "wins": str(stats.get("wins", "0")),
+            "ties": str(stats.get("ties", "0")),
+            "losses": str(stats.get("losses", "0")),
+            "gf": str(stats.get("pointsFor", "0")),
+            "ga": str(stats.get("pointsAgainst", "0")),
+            "gd": str(stats.get("pointDifferential", "0")),
+            "points": str(stats.get("points", "0")),
+        })
+    return output
+
+
+def cmd_standings(league):
+    standings = fetch_standings(league)
+    print(json.dumps(standings))
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -428,6 +545,8 @@ def main():
     command = args[0]
     if command == "leagues":
         cmd_leagues(args[1] if len(args) > 1 else 200)
+    elif command == "standings":
+        cmd_standings(args[1] if len(args) > 1 else "esp.1")
     elif command == "next":
         team_id = args[1] if len(args) > 1 else ""
         primary = args[2] if len(args) > 2 else "esp.1"
