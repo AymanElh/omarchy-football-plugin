@@ -529,16 +529,75 @@ Panel {
               Button { width: (parent.width - parent.spacing * 4) / 5; text: "League"; selected: root.matchScope === "league"; bordered: true; onClicked: root.setMatchScope("league") }
             }
             QQC.ComboBox {
+              id: leagueMatchesCombo
               visible: root.matchScope === "league"
               width: parent.width
               model: root.selectedLeagues.map(function(id) { return Model.leagueName(id) })
               currentIndex: Math.max(0, root.selectedLeagues.indexOf(root.leagueMatchesId))
               onActivated: function(index) { root.selectLeagueMatches(root.selectedLeagues[index]) }
+
+              contentItem: Text {
+                leftPadding: Style.space(12)
+                rightPadding: Style.space(24)
+                text: leagueMatchesCombo.displayText
+                font.family: Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+                color: "#FFFFFF"
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+              }
+
+              background: Rectangle {
+                implicitHeight: Style.space(34)
+                radius: Style.cornerRadius
+                color: Qt.rgba(Commons.Color.menu.r, Commons.Color.menu.g, Commons.Color.menu.b, 0.85)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.20)
+              }
+
+              delegate: QQC.ItemDelegate {
+                width: leagueMatchesCombo.width
+                contentItem: Text {
+                  text: modelData
+                  color: "#FFFFFF"
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: leagueMatchesCombo.currentIndex === index
+                  verticalAlignment: Text.AlignVCenter
+                  elide: Text.ElideRight
+                }
+                background: Rectangle {
+                  color: highlighted ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.30) : "transparent"
+                }
+              }
+
+              popup: QQC.Popup {
+                y: leagueMatchesCombo.height + Style.space(2)
+                width: leagueMatchesCombo.width
+                implicitHeight: contentItem.implicitHeight + Style.space(8)
+                padding: Style.space(4)
+                contentItem: ListView {
+                  clip: true
+                  implicitHeight: contentHeight
+                  model: leagueMatchesCombo.popup.visible ? leagueMatchesCombo.delegateModel : null
+                  currentIndex: leagueMatchesCombo.highlightedIndex
+                  QQC.ScrollIndicator.vertical: QQC.ScrollIndicator { }
+                }
+                background: Rectangle {
+                  color: Commons.Color.menu.background
+                  border.color: Qt.rgba(1, 1, 1, 0.20)
+                  border.width: 1
+                  radius: Style.cornerRadius
+                }
+              }
             }
             Text {
               visible: root.matchScope === "league"
               text: "Scheduled matches over the next 30 days"
-              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+              color: "#FFFFFF"
+              opacity: 0.8
+              font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
             }
 
             Column {
@@ -547,22 +606,83 @@ Panel {
               spacing: Style.space(8)
 
               QQC.ComboBox {
+                id: standingsCombo
                 width: parent.width
                 model: root.selectedLeagues.map(function(id) { return Model.leagueName(id) })
                 currentIndex: Math.max(0, root.selectedLeagues.indexOf(root.standingsLeagueId))
                 onActivated: function(index) { root.selectStandingsLeague(root.selectedLeagues[index]) }
+
+                contentItem: Text {
+                  leftPadding: Style.space(12)
+                  rightPadding: Style.space(24)
+                  text: standingsCombo.displayText
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  color: "#FFFFFF"
+                  verticalAlignment: Text.AlignVCenter
+                  elide: Text.ElideRight
+                }
+
+                background: Rectangle {
+                  implicitHeight: Style.space(34)
+                  radius: Style.cornerRadius
+                  color: Qt.rgba(Commons.Color.menu.r, Commons.Color.menu.g, Commons.Color.menu.b, 0.85)
+                  border.width: 1
+                  border.color: Qt.rgba(1, 1, 1, 0.20)
+                }
+
+                delegate: QQC.ItemDelegate {
+                  width: standingsCombo.width
+                  contentItem: Text {
+                    text: modelData
+                    color: "#FFFFFF"
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: standingsCombo.currentIndex === index
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                  }
+                  background: Rectangle {
+                    color: highlighted ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.30) : "transparent"
+                  }
+                }
+
+                popup: QQC.Popup {
+                  y: standingsCombo.height + Style.space(2)
+                  width: standingsCombo.width
+                  implicitHeight: contentItem.implicitHeight + Style.space(8)
+                  padding: Style.space(4)
+                  contentItem: ListView {
+                    clip: true
+                    implicitHeight: contentHeight
+                    model: standingsCombo.popup.visible ? standingsCombo.delegateModel : null
+                    currentIndex: standingsCombo.highlightedIndex
+                    QQC.ScrollIndicator.vertical: QQC.ScrollIndicator { }
+                  }
+                  background: Rectangle {
+                    color: Commons.Color.menu.background
+                    border.color: Qt.rgba(1, 1, 1, 0.20)
+                    border.width: 1
+                    radius: Style.cornerRadius
+                  }
+                }
               }
 
               Text {
                 visible: root.isLoadingStandings
                 text: "Loading standings…"
-                color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                color: "#FFFFFF"
+                opacity: 0.85
+                font.family: Style.font.family; font.pixelSize: Style.font.body
               }
 
               Text {
                 visible: !root.isLoadingStandings && root.standings.length === 0
                 text: root.standingsError || "No standings available for this competition."
-                color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+                color: "#FFFFFF"
+                opacity: 0.85
+                font.family: Style.font.family; font.pixelSize: Style.font.body
               }
 
               Rectangle {
@@ -572,7 +692,7 @@ Panel {
                 radius: Style.cornerRadius
                 color: Qt.rgba(Commons.Color.menu.r, Commons.Color.menu.g, Commons.Color.menu.b, 0.70)
                 border.width: 1
-                border.color: Qt.rgba(Commons.Color.muted.r, Commons.Color.muted.g, Commons.Color.muted.b, 0.25)
+                border.color: Qt.rgba(1, 1, 1, 0.18)
 
                 Column {
                   id: tableColumn
@@ -584,29 +704,33 @@ Panel {
                     width: parent.width
                     height: Style.space(26)
                     radius: Style.cornerRadius
-                    color: Qt.rgba(Commons.Color.foreground.r, Commons.Color.foreground.g, Commons.Color.foreground.b, 0.05)
+                    color: Qt.rgba(1, 1, 1, 0.08)
                     Row {
                       anchors.fill: parent
                       anchors.leftMargin: Style.space(6)
                       anchors.rightMargin: Style.space(6)
                       spacing: Style.space(4)
 
-                      Text { width: Style.space(24); text: "#"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: parent.width - Style.space(24 + 28*4 + 36 + 36 + 24); text: "Club"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: Style.space(28); text: "P"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: Style.space(28); text: "W"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: Style.space(28); text: "D"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: Style.space(28); text: "L"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: Style.space(36); text: "GD"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                      Text { width: Style.space(36); text: "PTS"; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(24); text: "#"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: parent.width - Style.space(24 + 28*4 + 36 + 36 + 24); text: "Club"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "P"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "W"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "D"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(28); text: "L"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(36); text: "GD"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                      Text { width: Style.space(36); text: "PTS"; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                     }
                   }
 
                   Repeater {
                     model: root.standings
                     delegate: Column {
+                      id: standingsRowCol
                       required property var modelData
                       required property int index
+                      readonly property bool isFav: root.favoriteTeam && String(root.favoriteTeam.id) === String(modelData.teamId)
+                      readonly property int rankNum: parseInt(modelData.rank) || (index + 1)
+                      readonly property bool isUclZone: rankNum <= 4
                       width: tableColumn.width
                       spacing: Style.space(2)
 
@@ -614,12 +738,12 @@ Panel {
                         visible: !!modelData.group && (index === 0 || root.standings[index - 1].group !== modelData.group)
                         width: parent.width
                         height: Style.space(22)
-                        color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.12)
+                        color: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.25)
                         radius: Style.cornerRadius
                         Text {
                           anchors.centerIn: parent
                           text: modelData.group
-                          color: Commons.Color.accent
+                          color: "#FFFFFF"
                           font.family: Style.font.family
                           font.pixelSize: Style.font.caption
                           font.bold: true
@@ -627,14 +751,11 @@ Panel {
                       }
 
                       Rectangle {
-                        readonly property bool isFav: root.favoriteTeam && String(root.favoriteTeam.id) === String(modelData.teamId)
-                        readonly property int rankNum: parseInt(modelData.rank) || (index + 1)
-                        readonly property bool isUclZone: rankNum <= 4
                         width: parent.width
                         height: Style.space(28)
                         radius: Style.cornerRadius
-                        color: isFav ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.20) : (index % 2 === 1 ? Qt.rgba(Commons.Color.foreground.r, Commons.Color.foreground.g, Commons.Color.foreground.b, 0.03) : "transparent")
-                        border.width: isFav ? 1 : 0
+                        color: standingsRowCol.isFav ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.25) : (index % 2 === 1 ? Qt.rgba(1, 1, 1, 0.04) : "transparent")
+                        border.width: standingsRowCol.isFav ? 1 : 0
                         border.color: Commons.Color.accent
 
                         Row {
@@ -646,10 +767,10 @@ Panel {
                           Text {
                             width: Style.space(24)
                             text: modelData.rank
-                            color: isFav ? Commons.Color.accent : (isUclZone ? Commons.Color.foreground : Commons.Color.muted)
+                            color: standingsRowCol.isFav ? Commons.Color.accent : (standingsRowCol.isUclZone ? Commons.Color.accent : "#FFFFFF")
                             font.family: Style.font.family
                             font.pixelSize: Style.font.bodySmall
-                            font.bold: isFav || isUclZone
+                            font.bold: standingsRowCol.isFav || standingsRowCol.isUclZone
                             horizontalAlignment: Text.AlignHCenter
                             anchors.verticalCenter: parent.verticalCenter
                           }
@@ -669,26 +790,26 @@ Panel {
                             Text {
                               width: parent.width - (modelData.logo ? Style.space(22) : 0)
                               text: modelData.short || modelData.name
-                              color: isFav ? Commons.Color.accent : Commons.Color.foreground
+                              color: standingsRowCol.isFav ? Commons.Color.accent : "#FFFFFF"
                               font.family: Style.font.family
                               font.pixelSize: Style.font.bodySmall
-                              font.bold: isFav
+                              font.bold: standingsRowCol.isFav
                               elide: Text.ElideRight
                               anchors.verticalCenter: parent.verticalCenter
                             }
                           }
 
-                          Text { width: Style.space(28); text: modelData.played; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                          Text { width: Style.space(28); text: modelData.wins; color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                          Text { width: Style.space(28); text: modelData.ties; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
-                          Text { width: Style.space(28); text: modelData.losses; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.played; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.wins; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.ties; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(28); text: modelData.losses; color: "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                           Text {
                             width: Style.space(36); text: modelData.gd
-                            color: modelData.gd.indexOf("+") === 0 ? Commons.Color.accent : (modelData.gd.indexOf("-") === 0 ? Commons.Color.urgent : Commons.Color.muted)
+                            color: modelData.gd.indexOf("+") === 0 ? "#4ade80" : (modelData.gd.indexOf("-") === 0 ? "#f87171" : "#FFFFFF")
                             font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
                             horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter
                           }
-                          Text { width: Style.space(36); text: modelData.points; color: isFav ? Commons.Color.accent : Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
+                          Text { width: Style.space(36); text: modelData.points; color: standingsRowCol.isFav ? Commons.Color.accent : "#FFFFFF"; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; font.bold: true; horizontalAlignment: Text.AlignHCenter; anchors.verticalCenter: parent.verticalCenter }
                         }
                       }
                     }
@@ -708,7 +829,7 @@ Panel {
             Row {
               visible: root.matchScope === "day"
               width: parent.width; spacing: Style.space(8)
-              Text { text: "Selected: " + Model.formatDayLabel(root.selectedDate); color: Commons.Color.muted
+              Text { text: "Selected: " + Model.formatDayLabel(root.selectedDate); color: "#FFFFFF"; opacity: 0.8
                 font.family: Style.font.family; font.pixelSize: Style.font.bodySmall; anchors.verticalCenter: parent.verticalCenter }
               Button { text: root.calendarOpen ? "Close calendar" : "Choose date"; bordered: true
                 onClicked: { root.calendarMonth = new Date(root.selectedDate.getFullYear(), root.selectedDate.getMonth(), 1); root.calendarOpen = !root.calendarOpen } }
@@ -728,7 +849,7 @@ Panel {
                 Repeater {
                   model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
                   delegate: Text { required property string modelData; width: parent.width / 7; text: modelData
-                    color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignHCenter }
+                    color: "#FFFFFF"; opacity: 0.75; font.family: Style.font.family; font.pixelSize: Style.font.caption; horizontalAlignment: Text.AlignHCenter }
                 }
               }
               Grid {
@@ -753,11 +874,11 @@ Panel {
                 }
               }
             }
-            Text { visible: root.matchScope !== "table" && root.isLoadingMatches; text: "Loading matches…"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
+            Text { visible: root.matchScope !== "table" && root.isLoadingMatches; text: "Loading matches…"; color: "#FFFFFF"; opacity: 0.85; font.family: Style.font.family; font.pixelSize: Style.font.body }
             Text {
               visible: root.matchScope !== "table" && !root.isLoadingMatches && root.matches.length === 0
               text: root.matchesError || (root.matchScope === "team" ? "No upcoming matches were found for " + (root.favoriteTeam ? root.favoriteTeam.name : "your favourite team") + "." : root.matchScope === "upcoming" ? "No upcoming matches in the next seven days." : root.matchScope === "league" ? "No scheduled matches were found for this league in the next 30 days." : "No matches found for this day in the selected leagues.")
-              color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body
+              color: "#FFFFFF"; opacity: 0.85; font.family: Style.font.family; font.pixelSize: Style.font.body
             }
 
             Component {
