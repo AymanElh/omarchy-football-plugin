@@ -20,7 +20,7 @@ var leagues = [
   { id: "uefa.nations", name: "UEFA Nations League", short: "Nations", logo: "" },
   { id: "caf.nations", name: "Africa Cup of Nations", short: "AFCON", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2390.png" },
   { id: "caf.champions", name: "CAF Champions League", short: "CAF CL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2391.png" },
-  { id: "mar.1", name: "Botola Pro (Morocco)", short: "Botola", logo: "" }
+  { id: "mar.1", name: "Botola Pro (Morocco)", short: "Botola", logo: "https://images.fotmob.com/image_resources/logo/leaguelogo/dark/530.png" }
 ]
 
 var popularTeamTerms = [

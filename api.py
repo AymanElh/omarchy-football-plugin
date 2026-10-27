@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import re
 import sys
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,7 @@ KNOWN_LEAGUE_LOGOS = {
     "fifa.cwc": "https://a.espncdn.com/i/leaguelogos/soccer/500/20.png",
     "fifa.world": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/4.png",
     "usa.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/19.png",
+    "mar.1": "https://images.fotmob.com/image_resources/logo/leaguelogo/dark/530.png",
 }
 LEAGUES = {
     "esp.1": "La Liga", "eng.1": "Premier League", "fra.1": "Ligue 1",
@@ -58,8 +60,14 @@ TEAM_SEARCH_LEAGUES = [
 TEAM_ALIASES = {
     "barca": ("barcelona",), "barça": ("barcelona",),
     "real": ("real madrid",),
-    "wac": ("wydad",), "wydad": ("wac",),
-    "raja": ("raja casablanca",), "inter miami": ("inter miami",),
+    "wac": ("wydad",), "wydad": ("wac", "wydad casablanca"),
+    "rca": ("raja", "raja casablanca"), "raja": ("rca", "raja casablanca"),
+    "asfar": ("far rabat",), "far": ("far rabat",),
+    "mas": ("mas fès", "mas fes"),
+    "fus": ("fus rabat",),
+    "kacm": ("kawkab", "marrakech"),
+    "irt": ("tanger", "ittihad tanger"),
+    "inter miami": ("inter miami",),
 }
 TEAM_COMPETITIONS = {
     "esp.1": ["esp.copa_del_rey", "esp.super_cup", "uefa.champions", "uefa.europa", "uefa.europa.conf", "fifa.cwc"],
@@ -152,6 +160,154 @@ def fetch_json(url):
         return None
 
 
+# --- Moroccan Botola Pro (FotMob bridge) ---
+_botola_cache = None
+_botola_lock = threading.Lock()
+FOTMOB_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": "https://www.fotmob.com/",
+}
+
+
+def fetch_botola_data():
+    global _botola_cache
+    with _botola_lock:
+        if _botola_cache is not None:
+            return _botola_cache
+        url = "https://www.fotmob.com/api/data/leagues?id=530"
+        request = urllib.request.Request(url, headers=FOTMOB_HEADERS)
+        try:
+            with urllib.request.urlopen(request, timeout=8) as response:
+                _botola_cache = json.loads(response.read().decode("utf-8"))
+                return _botola_cache
+        except (OSError, ValueError, urllib.error.URLError):
+            return None
+
+
+def parse_botola_match(m):
+    status = m.get("status", {})
+    score_str = status.get("scoreStr")
+    home_score, away_score = "", ""
+    if score_str and "-" in score_str:
+        parts = score_str.split("-")
+        home_score = parts[0].strip()
+        away_score = parts[1].strip()
+
+    finished = status.get("finished", False)
+    started = status.get("started", False)
+    cancelled = status.get("cancelled", False)
+    if cancelled or finished:
+        state = "post"
+    elif started:
+        state = "in"
+    else:
+        state = "pre"
+
+    if cancelled:
+        detail = "Cancelled"
+    elif state == "in":
+        detail = status.get("liveTime", {}).get("short") or status.get("reason", {}).get("short") or "LIVE"
+    elif state == "post":
+        detail = status.get("reason", {}).get("short") or "FT"
+    else:
+        detail = "Scheduled"
+
+    round_name = m.get("roundName") or m.get("round") or ""
+    round_label = f"Round {round_name}" if round_name else ""
+
+    home_obj = m.get("home", {})
+    away_obj = m.get("away", {})
+    home_id = str(home_obj.get("id", ""))
+    away_id = str(away_obj.get("id", ""))
+
+    return {
+        "id": str(m.get("id", "")),
+        "leagueId": "mar.1",
+        "league": "Botola Pro",
+        "leagueLogo": KNOWN_LEAGUE_LOGOS.get("mar.1", ""),
+        "date": status.get("utcTime", ""),
+        "state": state,
+        "detail": detail,
+        "round": round_label,
+        "homeId": home_id,
+        "awayId": away_id,
+        "home": home_obj.get("name") or home_obj.get("shortName") or "?",
+        "away": away_obj.get("name") or away_obj.get("shortName") or "?",
+        "homeLogo": f"https://images.fotmob.com/image_resources/logo/teamlogo/{home_id}.png" if home_id else "",
+        "awayLogo": f"https://images.fotmob.com/image_resources/logo/teamlogo/{away_id}.png" if away_id else "",
+        "homeScore": home_score,
+        "awayScore": away_score,
+    }
+
+
+def fetch_botola_matches(date_text=None):
+    data = fetch_botola_data()
+    if not data or not data.get("fixtures"):
+        return []
+    all_matches = data["fixtures"].get("allMatches", [])
+    result = []
+    for m in all_matches:
+        parsed = parse_botola_match(m)
+        if date_text:
+            match_date = (parsed.get("date") or "")[:10].replace("-", "")
+            if match_date != date_text:
+                continue
+        result.append(parsed)
+    return result
+
+
+def fetch_botola_standings():
+    data = fetch_botola_data()
+    if not data or not data.get("table"):
+        return []
+    tables = data["table"]
+    all_table = tables[0].get("data", {}).get("table", {}).get("all", [])
+    output = []
+    for item in all_table:
+        team_id = str(item.get("id", ""))
+        name = item.get("name", "?")
+        short = item.get("shortName") or name
+        logo = f"https://images.fotmob.com/image_resources/logo/teamlogo/{team_id}.png" if team_id else ""
+        scores_str = item.get("scoresStr", "0-0")
+        gf, ga = "0", "0"
+        if scores_str and "-" in scores_str:
+            parts = scores_str.split("-")
+            gf = parts[0].strip()
+            ga = parts[1].strip()
+        output.append({
+            "rank": str(item.get("idx", len(output) + 1)),
+            "teamId": team_id,
+            "name": name,
+            "short": short,
+            "logo": logo,
+            "group": "",
+            "played": str(item.get("played", "0")),
+            "wins": str(item.get("wins", "0")),
+            "ties": str(item.get("draws", "0")),
+            "losses": str(item.get("losses", "0")),
+            "gf": gf,
+            "ga": ga,
+            "gd": str(item.get("goalConDiff", "0")),
+            "points": str(item.get("pts", "0")),
+        })
+    return output
+
+
+def fetch_botola_teams():
+    standings = fetch_botola_standings()
+    output = []
+    for s in standings:
+        output.append({
+            "id": s["teamId"],
+            "name": s["name"],
+            "short": s["short"],
+            "logo": s["logo"],
+            "leagueId": "mar.1",
+            "league": "Botola Pro",
+        })
+    return output
+
+
 def event_parts(event):
     competitions = event.get("competitions") or [{}]
     competition = competitions[0] if competitions else {}
@@ -191,6 +347,8 @@ def event_round(event, competition=None):
 
 
 def fetch_team_next(league, team_id):
+    if league == "mar.1":
+        return [m for m in fetch_botola_matches() if str(team_id) in (m["homeId"], m["awayId"])]
     data = fetch_json(f"{BASE}/{league}/teams/{team_id}")
     if not data or not data.get("team"):
         return []
@@ -213,7 +371,8 @@ def cmd_next(team_id, primary_league, selected_leagues):
             event_id = str(event.get("id", ""))
             if event_id and event_id in seen:
                 continue
-            competition, competitors, status = event_parts(event)
+            normalized = "homeId" in event and "awayId" in event
+            competition, competitors, status = ({}, [], {}) if normalized else event_parts(event)
             date_text = event.get("date") or competition.get("date")
             if not date_text:
                 continue
@@ -223,32 +382,56 @@ def cmd_next(team_id, primary_league, selected_leagues):
                     date = date.replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
-            state = status.get("state", "pre")
+            state = event.get("state", "pre") if normalized else status.get("state", "pre")
             if state == "post" and date < now - timedelta(hours=3):
                 continue
             if date < now - timedelta(hours=3) and state != "in":
                 continue
-            home, away, home_team, away_team = competitors_for(competitors)
-            home_id, away_id = str(home_team.get("id", "")), str(away_team.get("id", ""))
-            if str(team_id) not in (home_id, away_id):
-                continue
-            opponent = away_team if home_id == str(team_id) else home_team
-            opponent_name = opponent.get("shortDisplayName") or opponent.get("displayName") or "Opponent"
-            candidates.append((date, {
-                "id": event_id, "date": date_text, "state": state,
-                "detail": status.get("shortDetail") or status.get("detail") or "Scheduled",
-                "opponent": opponent_name,
-                "homeName": home_team.get("shortDisplayName") or home_team.get("displayName") or "Home",
-                "awayName": away_team.get("shortDisplayName") or away_team.get("displayName") or "Away",
-                "homeLogo": extract_team_logo(home_team),
-                "awayLogo": extract_team_logo(away_team),
-                "homeScore": home.get("score", ""), "awayScore": away.get("score", ""),
-                "league": event.get("league", {}).get("name") or display_league_name(league),
-                "leagueId": league,
-                "leagueLogo": extract_league_logo(league, event=event),
-                "venue": competition.get("venue", {}).get("fullName", ""),
-                "round": event_round(event, competition),
-            }))
+            if normalized:
+                home_id, away_id = str(event.get("homeId", "")), str(event.get("awayId", ""))
+                if str(team_id) not in (home_id, away_id):
+                    continue
+                home_name = event.get("home", "Home")
+                away_name = event.get("away", "Away")
+                opponent_name = away_name if home_id == str(team_id) else home_name
+                candidates.append((date, {
+                    "id": event_id, "date": date_text, "state": state,
+                    "detail": event.get("detail", "Scheduled"),
+                    "opponent": opponent_name,
+                    "homeName": home_name,
+                    "awayName": away_name,
+                    "homeLogo": event.get("homeLogo", ""),
+                    "awayLogo": event.get("awayLogo", ""),
+                    "homeScore": event.get("homeScore", ""),
+                    "awayScore": event.get("awayScore", ""),
+                    "league": event.get("league") or display_league_name(league),
+                    "leagueId": league,
+                    "leagueLogo": event.get("leagueLogo") or KNOWN_LEAGUE_LOGOS.get(league, ""),
+                    "venue": event.get("venue", ""),
+                    "round": event.get("round", ""),
+                }))
+            else:
+                home, away, home_team, away_team = competitors_for(competitors)
+                home_id, away_id = str(home_team.get("id", "")), str(away_team.get("id", ""))
+                if str(team_id) not in (home_id, away_id):
+                    continue
+                opponent = away_team if home_id == str(team_id) else home_team
+                opponent_name = opponent.get("shortDisplayName") or opponent.get("displayName") or "Opponent"
+                candidates.append((date, {
+                    "id": event_id, "date": date_text, "state": state,
+                    "detail": status.get("shortDetail") or status.get("detail") or "Scheduled",
+                    "opponent": opponent_name,
+                    "homeName": home_team.get("shortDisplayName") or home_team.get("displayName") or "Home",
+                    "awayName": away_team.get("shortDisplayName") or away_team.get("displayName") or "Away",
+                    "homeLogo": extract_team_logo(home_team),
+                    "awayLogo": extract_team_logo(away_team),
+                    "homeScore": home.get("score", ""), "awayScore": away.get("score", ""),
+                    "league": event.get("league", {}).get("name") or display_league_name(league),
+                    "leagueId": league,
+                    "leagueLogo": extract_league_logo(league, event=event),
+                    "venue": competition.get("venue", {}).get("fullName", ""),
+                    "round": event_round(event, competition),
+                }))
             if event_id:
                 seen.add(event_id)
     candidates.sort(key=lambda item: item[0])
@@ -256,6 +439,8 @@ def cmd_next(team_id, primary_league, selected_leagues):
 
 
 def fetch_team_schedule(league, team_id):
+    if league == "mar.1":
+        return league, [m for m in fetch_botola_matches() if str(team_id) in (m["homeId"], m["awayId"])]
     data = fetch_json(f"{BASE}/{league}/teams/{team_id}/schedule")
     events = (data or {}).get("events", [])
     if isinstance(events, dict):
@@ -354,11 +539,11 @@ def cmd_team_matches(team_id, primary_league, selected_leagues, limit=10):
         collect(league, events)
 
     # Team schedule feeds can contain only played fixtures. Fill from future
-    # scoreboards a week at a time and stop when ten upcoming team games exist.
-    if len(candidates) < max_results:
-        relevant = leagues
+    # scoreboards a week at a time and stop when upcoming team games exist.
+    if len(candidates) < max_results and primary_league != "mar.1":
+        relevant = [l for l in leagues if l != "mar.1"]
         today = datetime.now().date()
-        for offset in range(0, 120, 7):
+        for offset in range(0, 35, 7):
             dates = [(today + timedelta(days=offset + day)).strftime("%Y%m%d") for day in range(7)]
             requests = [(league, date) for league in relevant for date in dates]
             with concurrent.futures.ThreadPoolExecutor(max_workers=min(12, len(requests))) as pool:
@@ -372,6 +557,8 @@ def cmd_team_matches(team_id, primary_league, selected_leagues, limit=10):
 
 
 def fetch_scoreboard(league, date_text):
+    if league == "mar.1":
+        return fetch_botola_matches(date_text)
     data = fetch_json(f"{BASE}/{league}/scoreboard?dates={date_text}")
     if not data:
         return []
@@ -438,6 +625,26 @@ def cmd_league_matches(league, days=30):
     if not league:
         print("[]")
         return
+    if league == "mar.1":
+        now = datetime.now(timezone.utc)
+        days = max(1, min(int(days), 60))
+        limit_date = now + timedelta(days=days)
+        matches = []
+        for m in fetch_botola_matches():
+            date_text = m.get("date")
+            if not date_text:
+                continue
+            try:
+                date = datetime.fromisoformat(date_text.replace("Z", "+00:00"))
+                if date.tzinfo is None:
+                    date = date.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            if now - timedelta(hours=3) <= date <= limit_date:
+                matches.append(m)
+        matches.sort(key=lambda m: m.get("date") or "")
+        print(json.dumps(matches))
+        return
     days = max(1, min(int(days), 60))
     today = datetime.now().date()
     dates = [(today + timedelta(days=offset)).strftime("%Y%m%d") for offset in range(days)]
@@ -456,6 +663,8 @@ def cmd_league_matches(league, days=30):
 
 
 def fetch_teams(league, limit=100):
+    if league == "mar.1":
+        return fetch_botola_teams()
     data = fetch_json(f"{BASE}/{league}/teams?limit={limit}")
     if not data:
         return []
@@ -510,6 +719,8 @@ def cmd_search_teams(leagues, query):
 def fetch_standings(league):
     if not league:
         return []
+    if league == "mar.1":
+        return fetch_botola_standings()
     data = fetch_json(f"{STANDINGS_BASE}/{league}/standings")
     if not data:
         return []
