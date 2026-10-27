@@ -445,14 +445,18 @@ Panel {
                     anchors.verticalCenter: parent.verticalCenter
                     Image {
                       source: (root.nextMatch && root.nextMatch.homeLogo) ? root.nextMatch.homeLogo : ""
-                      width: Style.space(22); height: Style.space(22)
+                      width: Style.space(28); height: Style.space(28)
                       fillMode: Image.PreserveAspectFit
                       asynchronous: true
+                      mipmap: true
+                      smooth: true
+                      sourceSize.width: Style.space(96)
+                      sourceSize.height: Style.space(96)
                       visible: source != ""
                       anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
-                      width: parent.width - ((root.nextMatch && root.nextMatch.homeLogo) ? Style.space(28) : 0)
+                      width: parent.width - ((root.nextMatch && root.nextMatch.homeLogo) ? Style.space(34) : 0)
                       text: root.nextMatch ? root.nextMatch.homeName : ""
                       color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading; font.bold: true
                       elide: Text.ElideRight
@@ -476,14 +480,18 @@ Panel {
                     anchors.verticalCenter: parent.verticalCenter
                     Image {
                       source: (root.nextMatch && root.nextMatch.awayLogo) ? root.nextMatch.awayLogo : ""
-                      width: Style.space(22); height: Style.space(22)
+                      width: Style.space(28); height: Style.space(28)
                       fillMode: Image.PreserveAspectFit
                       asynchronous: true
+                      mipmap: true
+                      smooth: true
+                      sourceSize.width: Style.space(96)
+                      sourceSize.height: Style.space(96)
                       visible: source != ""
                       anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
-                      width: parent.width - ((root.nextMatch && root.nextMatch.awayLogo) ? Style.space(28) : 0)
+                      width: parent.width - ((root.nextMatch && root.nextMatch.awayLogo) ? Style.space(34) : 0)
                       text: root.nextMatch ? root.nextMatch.awayName : ""
                       color: Commons.Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading; font.bold: true
                       elide: Text.ElideRight; horizontalAlignment: Text.AlignRight
@@ -497,14 +505,18 @@ Panel {
                   spacing: Style.space(6)
                   Image {
                     source: (root.nextMatch && root.nextMatch.leagueLogo) ? root.nextMatch.leagueLogo : ""
-                    width: Style.space(16); height: Style.space(16)
+                    width: Style.space(18); height: Style.space(18)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
+                    mipmap: true
+                    smooth: true
+                    sourceSize.width: Style.space(64)
+                    sourceSize.height: Style.space(64)
                     visible: source != ""
                     anchors.verticalCenter: parent.verticalCenter
                   }
                   Text {
-                    width: parent.width - ((root.nextMatch && root.nextMatch.leagueLogo) ? Style.space(22) : 0)
+                    width: parent.width - ((root.nextMatch && root.nextMatch.leagueLogo) ? Style.space(24) : 0)
                     text: root.nextMatch ? root.nextMatch.league + (root.nextMatch.round ? " · " + root.nextMatch.round : "") + " · " + Model.formatDayLabel(new Date(root.nextMatch.date)) + " at " + Model.formatMatchTime(root.nextMatch.date) : ""
                     color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
                     elide: Text.ElideRight
@@ -781,14 +793,18 @@ Panel {
                             anchors.verticalCenter: parent.verticalCenter
                             Image {
                               source: modelData.logo || ""
-                              width: Style.space(16); height: Style.space(16)
+                              width: Style.space(18); height: Style.space(18)
                               fillMode: Image.PreserveAspectFit
                               asynchronous: true
+                              mipmap: true
+                              smooth: true
+                              sourceSize.width: Style.space(64)
+                              sourceSize.height: Style.space(64)
                               visible: source != ""
                               anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
-                              width: parent.width - (modelData.logo ? Style.space(22) : 0)
+                              width: parent.width - (modelData.logo ? Style.space(24) : 0)
                               text: modelData.short || modelData.name
                               color: standingsRowCol.isFav ? Commons.Color.accent : "#FFFFFF"
                               font.family: Style.font.family
@@ -936,14 +952,18 @@ Panel {
                       anchors.verticalCenter: parent.verticalCenter
                       Image {
                         source: modelData.homeLogo || ""
-                        width: Style.space(20); height: Style.space(20)
+                        width: Style.space(22); height: Style.space(22)
                         fillMode: Image.PreserveAspectFit
                         asynchronous: true
+                        mipmap: true
+                        smooth: true
+                        sourceSize.width: Style.space(64)
+                        sourceSize.height: Style.space(64)
                         visible: source != ""
                         anchors.verticalCenter: parent.verticalCenter
                       }
                       Text {
-                        width: parent.width - ((modelData.homeLogo && modelData.homeLogo !== "") ? Style.space(26) : 0)
+                        width: parent.width - ((modelData.homeLogo && modelData.homeLogo !== "") ? Style.space(28) : 0)
                         text: modelData.home; color: Commons.Color.foreground
                         font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight
                         anchors.verticalCenter: parent.verticalCenter
@@ -962,14 +982,18 @@ Panel {
                       anchors.verticalCenter: parent.verticalCenter
                       Image {
                         source: modelData.awayLogo || ""
-                        width: Style.space(20); height: Style.space(20)
+                        width: Style.space(22); height: Style.space(22)
                         fillMode: Image.PreserveAspectFit
                         asynchronous: true
+                        mipmap: true
+                        smooth: true
+                        sourceSize.width: Style.space(64)
+                        sourceSize.height: Style.space(64)
                         visible: source != ""
                         anchors.verticalCenter: parent.verticalCenter
                       }
                       Text {
-                        width: parent.width - ((modelData.awayLogo && modelData.awayLogo !== "") ? Style.space(26) : 0)
+                        width: parent.width - ((modelData.awayLogo && modelData.awayLogo !== "") ? Style.space(28) : 0)
                         text: modelData.away; color: Commons.Color.foreground
                         font.family: Style.font.family; font.pixelSize: Style.font.body; font.bold: true; elide: Text.ElideRight
                         horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter
@@ -1002,9 +1026,13 @@ Panel {
                     Image {
                       id: grpLeagueLogo
                       source: modelData.leagueLogo || Model.leagueLogo(modelData.leagueId)
-                      width: Style.space(20); height: Style.space(20)
+                      width: Style.space(22); height: Style.space(22)
                       fillMode: Image.PreserveAspectFit
                       asynchronous: true
+                      mipmap: true
+                      smooth: true
+                      sourceSize.width: Style.space(64)
+                      sourceSize.height: Style.space(64)
                       visible: source != ""
                       anchors.verticalCenter: parent.verticalCenter
                     }
@@ -1015,7 +1043,7 @@ Panel {
                       font.pixelSize: Style.font.body
                       font.bold: true
                       elide: Text.ElideRight
-                      width: parent.width - (grpLeagueLogo.visible ? Style.space(28) : 0) - badgeRect.width - Style.space(16)
+                      width: parent.width - (grpLeagueLogo.visible ? Style.space(30) : 0) - badgeRect.width - Style.space(16)
                       anchors.verticalCenter: parent.verticalCenter
                     }
                     Rectangle {

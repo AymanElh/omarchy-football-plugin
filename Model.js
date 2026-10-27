@@ -1,25 +1,25 @@
 .pragma library
 
 var leagues = [
-  { id: "eng.1", name: "Premier League", short: "PL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png" },
-  { id: "esp.1", name: "La Liga", short: "LL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png" },
-  { id: "uefa.champions", name: "UEFA Champions League", short: "UCL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png" },
-  { id: "ita.1", name: "Serie A", short: "SA", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png" },
-  { id: "ger.1", name: "Bundesliga", short: "BL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png" },
-  { id: "fra.1", name: "Ligue 1", short: "L1", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png" },
+  { id: "eng.1", name: "Premier League", short: "PL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/23.png" },
+  { id: "esp.1", name: "La Liga", short: "LL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/15.png" },
+  { id: "uefa.champions", name: "UEFA Champions League", short: "UCL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2.png" },
+  { id: "ita.1", name: "Serie A", short: "SA", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/12.png" },
+  { id: "ger.1", name: "Bundesliga", short: "BL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/10.png" },
+  { id: "fra.1", name: "Ligue 1", short: "L1", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/9.png" },
   { id: "uefa.europa", name: "Europa League", short: "UEL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2254.png" },
-  { id: "por.1", name: "Primeira Liga (Portugal)", short: "Portugal", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png" },
-  { id: "ned.1", name: "Eredivisie (Netherlands)", short: "Eredivisie", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png" },
-  { id: "tur.1", name: "Süper Lig (Türkiye)", short: "Süper Lig", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png" },
+  { id: "por.1", name: "Primeira Liga (Portugal)", short: "Portugal", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/14.png" },
+  { id: "ned.1", name: "Eredivisie (Netherlands)", short: "Eredivisie", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/11.png" },
+  { id: "tur.1", name: "Süper Lig (Türkiye)", short: "Süper Lig", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/18.png" },
   { id: "esp.copa_del_rey", name: "Copa del Rey", short: "Copa del Rey", logo: "" },
   { id: "esp.super_cup", name: "Spanish Super Cup", short: "Super Cup", logo: "" },
   { id: "uefa.super_cup", name: "UEFA Super Cup", short: "UEFA Super Cup", logo: "" },
   { id: "fifa.cwc", name: "FIFA Club World Cup", short: "Club World Cup", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/20.png" },
-  { id: "fifa.world", name: "FIFA World Cup", short: "World Cup", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/4.png" },
+  { id: "fifa.world", name: "FIFA World Cup", short: "World Cup", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/4.png" },
   { id: "conmebol.america", name: "Copa América", short: "Copa América", logo: "" },
   { id: "uefa.nations", name: "UEFA Nations League", short: "Nations", logo: "" },
-  { id: "caf.nations", name: "Africa Cup of Nations", short: "AFCON", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2390.png" },
-  { id: "caf.champions", name: "CAF Champions League", short: "CAF CL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500/2391.png" },
+  { id: "caf.nations", name: "Africa Cup of Nations", short: "AFCON", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2390.png" },
+  { id: "caf.champions", name: "CAF Champions League", short: "CAF CL", logo: "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2391.png" },
   { id: "mar.1", name: "Botola Pro (Morocco)", short: "Botola", logo: "" }
 ]
 

@@ -13,22 +13,22 @@ CORE_BASE = "https://sports.core.api.espn.com/v2/sports/soccer"
 STANDINGS_BASE = "https://site.api.espn.com/apis/v2/sports/soccer"
 HEADERS = {"User-Agent": "AymanFootballWidget/1.0 (Linux)"}
 KNOWN_LEAGUE_LOGOS = {
-    "esp.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/15.png",
-    "eng.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/23.png",
-    "uefa.champions": "https://a.espncdn.com/i/leaguelogos/soccer/500/2.png",
-    "ita.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/12.png",
-    "ger.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/10.png",
-    "fra.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/9.png",
+    "esp.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/15.png",
+    "eng.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/23.png",
+    "uefa.champions": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2.png",
+    "ita.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/12.png",
+    "ger.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/10.png",
+    "fra.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/9.png",
     "uefa.europa": "https://a.espncdn.com/i/leaguelogos/soccer/500/2254.png",
     "uefa.europa.conf": "https://a.espncdn.com/i/leaguelogos/soccer/500/20349.png",
-    "por.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/14.png",
-    "ned.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/11.png",
-    "tur.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/18.png",
-    "caf.champions": "https://a.espncdn.com/i/leaguelogos/soccer/500/2391.png",
-    "caf.nations": "https://a.espncdn.com/i/leaguelogos/soccer/500/2390.png",
+    "por.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/14.png",
+    "ned.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/11.png",
+    "tur.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/18.png",
+    "caf.champions": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2391.png",
+    "caf.nations": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/2390.png",
     "fifa.cwc": "https://a.espncdn.com/i/leaguelogos/soccer/500/20.png",
-    "fifa.world": "https://a.espncdn.com/i/leaguelogos/soccer/500/4.png",
-    "usa.1": "https://a.espncdn.com/i/leaguelogos/soccer/500/19.png",
+    "fifa.world": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/4.png",
+    "usa.1": "https://a.espncdn.com/i/leaguelogos/soccer/500-dark/19.png",
 }
 LEAGUES = {
     "esp.1": "La Liga", "eng.1": "Premier League", "fra.1": "Ligue 1",
@@ -79,30 +79,52 @@ def display_league_name(league):
     return LEAGUES.get(league, league.replace(".", " ").replace("_", " ").title())
 
 
+def prefer_dark_logo(url):
+    """Return the high-contrast dark-theme variant of an ESPN logo if available."""
+    if not url or not isinstance(url, str):
+        return ""
+    if "/500/" in url and "espncdn.com" in url:
+        # Some competitions only have standard 500 assets
+        if any(exc in url for exc in ["/2254.png", "/20349.png", "/20.png"]):
+            return url
+        return url.replace("/500/", "/500-dark/")
+    return url
+
+
 def extract_team_logo(team):
     if not team or not isinstance(team, dict):
         return ""
-    if team.get("logo"):
-        return team["logo"]
     logos = team.get("logos") or []
-    if isinstance(logos, list) and logos and isinstance(logos[0], dict):
-        return logos[0].get("href", "")
+    if isinstance(logos, list) and logos:
+        # Check for explicitly tagged dark mode logo
+        for item in logos:
+            if isinstance(item, dict) and "dark" in item.get("rel", []):
+                return item.get("href", "")
+        if isinstance(logos[0], dict) and logos[0].get("href"):
+            return prefer_dark_logo(logos[0].get("href", ""))
+    logo = team.get("logo") or ""
+    if logo:
+        return prefer_dark_logo(logo)
     return ""
 
 
 def extract_league_logo(league_id, event=None, scoreboard_data=None):
     if scoreboard_data and scoreboard_data.get("leagues"):
         logos = scoreboard_data["leagues"][0].get("logos") or []
-        if logos and isinstance(logos, list) and isinstance(logos[0], dict):
-            href = logos[0].get("href")
-            if href:
-                return href
+        if isinstance(logos, list) and logos:
+            for l in logos:
+                if isinstance(l, dict) and "dark" in l.get("rel", []):
+                    return l.get("href", "")
+            if isinstance(logos[0], dict) and logos[0].get("href"):
+                return prefer_dark_logo(logos[0].get("href", ""))
     if event and isinstance(event.get("league"), dict):
         logos = event["league"].get("logos") or []
-        if logos and isinstance(logos, list) and isinstance(logos[0], dict):
-            href = logos[0].get("href")
-            if href:
-                return href
+        if isinstance(logos, list) and logos:
+            for l in logos:
+                if isinstance(l, dict) and "dark" in l.get("rel", []):
+                    return l.get("href", "")
+            if isinstance(logos[0], dict) and logos[0].get("href"):
+                return prefer_dark_logo(logos[0].get("href", ""))
     return KNOWN_LEAGUE_LOGOS.get(league_id, "")
 
 
