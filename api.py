@@ -1153,17 +1153,18 @@ def cached_logo(url):
         return ""
 
 
-PLUGIN_ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "football-icon.png")
+PLUGIN_GLYPH = "\uf1e3"  # Nerd Font football, drawn in the theme colours
 
 
 def notify(title, body, urgency="normal", icon=""):
-    # Omarchy's toast shows the image-path hint as the picture; a file path
-    # given as the app icon (-i) is ignored there and falls back to a letter.
-    # Use the team crest when there is one, otherwise the plugin icon.
-    image = icon if icon and os.path.exists(icon) else PLUGIN_ICON
+    # Omarchy's toast shows the image-path hint as a picture and the
+    # omarchy-glyph hint as a themed icon. Use the team crest when there is
+    # one, otherwise the football glyph like Omarchy's own notifications.
     command = ["notify-send", "-a", "Football", "-u", urgency]
-    if os.path.exists(image):
-        command += ["-h", "string:image-path:" + image]
+    if icon and os.path.exists(icon):
+        command += ["-h", "string:image-path:" + icon]
+    else:
+        command += ["-h", "string:omarchy-glyph:" + PLUGIN_GLYPH]
     command += ["--", title[:120], body[:300]]
     try:
         subprocess.run(command, timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

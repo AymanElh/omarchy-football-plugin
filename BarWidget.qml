@@ -51,13 +51,10 @@ BarWidget {
       anchors.centerIn: parent
       spacing: Style.space(6)
       scale: button.pressScale
-      Image {
-        source: Qt.resolvedUrl("assets/football-icon.png")
-        width: Style.space(22)
-        height: width
-        sourceSize.width: 64
-        sourceSize.height: 64
-        fillMode: Image.PreserveAspectFit
+      PText {
+        text: "\uf1e3"
+        color: button.foreground
+        font.pixelSize: button.fontSize
         anchors.verticalCenter: parent.verticalCenter
       }
       PText {

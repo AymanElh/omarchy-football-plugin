@@ -450,14 +450,11 @@ Panel {
             onClicked: root.setView("main")
             anchors.verticalCenter: parent.verticalCenter
           }
-          Image {
+          PText {
             visible: root.view === "main"
-            source: Qt.resolvedUrl("assets/football-icon.png")
-            width: Style.space(28)
-            height: width
-            sourceSize.width: 64
-            sourceSize.height: 64
-            fillMode: Image.PreserveAspectFit
+            text: "\uf1e3"
+            color: root.accent
+            font.pixelSize: Style.font.heading
             anchors.verticalCenter: parent.verticalCenter
           }
           PText {

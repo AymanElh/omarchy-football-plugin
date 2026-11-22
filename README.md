@@ -18,7 +18,7 @@ Your teams' next kick-off or live score sits in the bar (e.g. `● Barcelona 2-1
   * **Table:** standings with qualification and relegation zones, and your teams highlighted.
 * **Match centre:** score and scorers, a goals/cards/substitutions timeline, statistics, and **lineups on a pitch** with formation, shirt numbers, goals, cards and substitutions.
 * **55 curated competitions:** grouped into Europe, Africa (Botola Pro, AFCON and its qualifiers, CAF Champions League, CAF Confederation Cup…), Asia, the Americas and international tournaments. Other ESPN competitions are found by searching.
-* **Real-time alerts:** kick-off, goals (with scorer), disallowed goals, red cards, half-time and full-time for your teams, plus kick-off reminders. Notifications show the team crest (or the plugin icon in `assets/football-icon.png`). Alerts for other matches in your competitions are optional. The widget polls every 30 seconds while a followed match is live, and every few minutes otherwise.
+* **Real-time alerts:** kick-off, goals (with scorer), disallowed goals, red cards, half-time and full-time for your teams, plus kick-off reminders. Notifications show the team crest (or a football glyph in your theme colours). Alerts for other matches in your competitions are optional. The widget polls every 30 seconds while a followed match is live, and every few minutes otherwise.
 * **Fast:** every response is cached on disk for a short time, other tabs are prefetched in the background, and team schedules take 2 requests instead of a 35-day scoreboard scan.
 * **No dependencies:** QML plus Python 3's standard library.
 
