@@ -11,14 +11,14 @@ Your teams' next kick-off or live score sits in the bar (e.g. `● Barcelona 2-1
 * **Follow several teams:** clubs and national teams, as many as you like. The bar shows whichever plays next, and a live match always takes priority.
 * **Every competition a team plays in:** league, domestic cups, continental cups, friendlies and national-team qualifiers (for example Morocco in AFCON Qualifying) all come from one cross-competition schedule.
 * **Five tabs:**
-  * **Matches:** Yesterday / Today / Tomorrow (plus a calendar for any other date) with a *Live* filter. Games are grouped by competition, with live games first.
+  * **Matches:** step through days with the ‹ › arrows (or ← → keys), click the date for a calendar, and filter to *Live*. Games are grouped by competition, with live games first.
   * **Week:** the next 7 days across your competitions.
   * **My teams:** upcoming fixtures and recent results (with W/D/L), for all followed teams or one at a time.
   * **Fixtures:** the next 3 weeks for one competition.
   * **Table:** standings with qualification and relegation zones, and your teams highlighted.
 * **Match centre:** score and scorers, a goals/cards/substitutions timeline, statistics, and **lineups on a pitch** with formation, shirt numbers, goals, cards and substitutions.
 * **55 curated competitions:** grouped into Europe, Africa (Botola Pro, AFCON and its qualifiers, CAF Champions League, CAF Confederation Cup…), Asia, the Americas and international tournaments. Other ESPN competitions are found by searching.
-* **Real-time alerts:** kick-off, goals (with scorer), disallowed goals, red cards, half-time and full-time for your teams, plus kick-off reminders. Notifications show the team crest (or the plugin icon). Alerts for other matches in your competitions are optional. The widget polls every 30 seconds while a followed match is live, and every few minutes otherwise.
+* **Real-time alerts:** kick-off, goals (with scorer), disallowed goals, red cards, half-time and full-time for your teams, plus kick-off reminders. Notifications show the team crest (or the plugin icon in `assets/football-icon.png`). Alerts for other matches in your competitions are optional. The widget polls every 30 seconds while a followed match is live, and every few minutes otherwise.
 * **Fast:** every response is cached on disk for a short time, other tabs are prefetched in the background, and team schedules take 2 requests instead of a 35-day scoreboard scan.
 * **No dependencies:** QML plus Python 3's standard library.
 

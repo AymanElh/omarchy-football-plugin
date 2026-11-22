@@ -266,13 +266,18 @@ Panel {
     if (followToday) selectedDate = now
     if (opened) refreshCurrent()
   }
-  function dayOffset(n) {
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate() + n)
+  function shiftDay(n) {
+    pickDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() + n))
   }
-  readonly property bool selectedIsNear: {
-    var rel = Math.round((selectedDate - today) / 86400000)
-    return rel >= -1 && rel <= 1
+  // "Today" / "Tomorrow" / "Yesterday", otherwise the weekday name.
+  function dayTitle(d) {
+    var rel = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today) / 86400000)
+    if (rel === 0) return "Today"
+    if (rel === 1) return "Tomorrow"
+    if (rel === -1) return "Yesterday"
+    return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][d.getDay()]
   }
+  readonly property bool selectedIsToday: Model.sameLocalDay(selectedDate, today)
   function calendarDays() {
     var first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
     var start = new Date(first); start.setDate(first.getDate() - ((first.getDay() + 6) % 7))
@@ -423,6 +428,9 @@ Panel {
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      onMoveRequested: function(dx, dy) {
+        if (dx !== 0 && root.view === "main" && root.tab === "today") root.shiftDay(dx)
+      }
 
       // ------------------------------------------------------------ header
       Item {
@@ -442,8 +450,18 @@ Panel {
             onClicked: root.setView("main")
             anchors.verticalCenter: parent.verticalCenter
           }
+          Image {
+            visible: root.view === "main"
+            source: Qt.resolvedUrl("assets/football-icon.png")
+            width: Style.space(28)
+            height: width
+            sourceSize.width: 64
+            sourceSize.height: 64
+            fillMode: Image.PreserveAspectFit
+            anchors.verticalCenter: parent.verticalCenter
+          }
           PText {
-            text: root.view === "settings" ? "Settings" : (root.view === "match" ? "Match centre" : "⚽  Football")
+            text: root.view === "settings" ? "Settings" : (root.view === "match" ? "Match centre" : "Football")
             font.pixelSize: Style.font.heading
             font.bold: true
             anchors.verticalCenter: parent.verticalCenter
@@ -661,54 +679,65 @@ Panel {
               }
             }
 
-            // ---- tab: today (yesterday / today / tomorrow) ----
+            // ---- tab: today (‹ day › navigator) ----
             Column {
               visible: root.tab === "today"
               width: parent.width
               spacing: Style.space(8)
               Row {
                 width: parent.width
-                spacing: Style.space(4)
-                Repeater {
-                  model: [-1, 0, 1]
-                  delegate: Rectangle {
-                    required property int modelData
-                    readonly property date day: root.dayOffset(modelData)
-                    readonly property bool active: Model.sameLocalDay(day, root.selectedDate)
-                    width: (bodyColumn.width - Style.space(4) * 3 - calButton.width) / 3
-                    height: Style.space(42)
-                    radius: Style.cornerRadius
-                    color: active ? root.tint(root.accent, 0.22) : (dayMouse.containsMouse ? root.tint(root.fg, 0.08) : root.tint(root.fg, 0.035))
-                    border.width: 1
-                    border.color: active ? root.accent : root.tint(root.fg, 0.10)
-                    Behavior on color { ColorAnimation { duration: Style.duration(120) } }
-                    Column {
-                      anchors.centerIn: parent
-                      PText {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: ["Yesterday", "Today", "Tomorrow"][modelData + 1]
-                        font.pixelSize: Style.font.bodySmall
-                        font.bold: active
-                        color: active ? root.accent : root.fg
-                      }
-                      PText {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: Model.shortDays[day.getDay()] + " " + day.getDate() + " " + Model.shortMonths[day.getMonth()]
-                        font.pixelSize: Style.font.caption
-                        color: active ? root.accent : Commons.Color.muted
-                      }
+                spacing: Style.space(6)
+                Button {
+                  id: prevDay
+                  iconText: "󰅁"
+                  tooltipText: "Previous day (←)"
+                  bordered: true
+                  width: Style.space(42)
+                  height: Style.space(42)
+                  onClicked: root.shiftDay(-1)
+                }
+                Rectangle {
+                  width: parent.width - prevDay.width - nextDay.width - parent.spacing * 2
+                  height: Style.space(42)
+                  radius: Style.cornerRadius
+                  color: root.calendarOpen ? root.tint(root.accent, 0.22)
+                         : (dayMouse.containsMouse ? root.tint(root.fg, 0.08) : root.tint(root.fg, 0.035))
+                  border.width: 1
+                  border.color: root.calendarOpen || root.selectedIsToday ? root.accent : root.tint(root.fg, 0.10)
+                  Behavior on color { ColorAnimation { duration: Style.duration(120) } }
+                  Column {
+                    anchors.centerIn: parent
+                    PText {
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      text: { root.today; return root.dayTitle(root.selectedDate) }
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                      color: root.selectedIsToday ? root.accent : root.fg
                     }
-                    MouseArea { id: dayMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pickDate(day) }
+                    PText {
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      text: Model.shortDays[root.selectedDate.getDay()] + " " + root.selectedDate.getDate() + " "
+                            + Model.shortMonths[root.selectedDate.getMonth()] + "  󰃭"
+                      font.pixelSize: Style.font.caption
+                      color: Commons.Color.muted
+                    }
+                  }
+                  MouseArea {
+                    id: dayMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { root.calendarMonth = new Date(root.selectedDate.getFullYear(), root.selectedDate.getMonth(), 1); root.calendarOpen = !root.calendarOpen }
                   }
                 }
                 Button {
-                  id: calButton
-                  iconText: "󰃭"
-                  tooltipText: "Pick another date"
+                  id: nextDay
+                  iconText: "󰅂"
+                  tooltipText: "Next day (→)"
                   bordered: true
-                  selected: root.calendarOpen || !root.selectedIsNear
+                  width: Style.space(42)
                   height: Style.space(42)
-                  onClicked: { root.calendarMonth = new Date(root.selectedDate.getFullYear(), root.selectedDate.getMonth(), 1); root.calendarOpen = !root.calendarOpen }
+                  onClicked: root.shiftDay(1)
                 }
               }
 
@@ -768,12 +797,11 @@ Panel {
                   selected: root.liveOnly
                   onClicked: root.liveOnly = true
                 }
-                PText {
-                  text: { root.today; return Model.formatDayLabel(root.selectedDate) }
-                  color: Commons.Color.muted
-                  font.pixelSize: Style.font.bodySmall
-                  anchors.verticalCenter: parent.verticalCenter
-                  leftPadding: Style.space(6)
+                Chip {
+                  visible: !root.selectedIsToday
+                  text: "Back to today"
+                  trailing: "󰁯"
+                  onClicked: root.pickDate(root.today)
                 }
               }
             }

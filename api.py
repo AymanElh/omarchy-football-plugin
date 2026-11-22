@@ -1153,7 +1153,7 @@ def cached_logo(url):
         return ""
 
 
-PLUGIN_ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.png")
+PLUGIN_ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "football-icon.png")
 
 
 def notify(title, body, urgency="normal", icon=""):
