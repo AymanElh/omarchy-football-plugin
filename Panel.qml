@@ -33,7 +33,11 @@ Panel {
   // ---------------------------------------------------------------- ui state
   property string view: "main"            // main | settings | match
   property string tab: "today"             // today | week | teams | fixtures | table
-  property date selectedDate: new Date()
+  // Midnight of the current local day.  Updated by the clock timer so the
+  // panel (which lives for the whole shell session) never keeps showing
+  // yesterday as "Today" after midnight.
+  property date today: Model.startOfToday()
+  property date selectedDate: Model.startOfToday()
   property date calendarMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   property bool calendarOpen: false
   property bool liveOnly: false
@@ -76,6 +80,7 @@ Panel {
   function openFromHotkey() { open() }
   function open() {
     root.controller.open = true
+    checkDayRollover()
     refreshCurrent()
     prefetch()
     Qt.callLater(function() { if (root.opened) keyCatcher.forceActiveFocus() })
@@ -224,7 +229,7 @@ Panel {
   }
 
   Timer { id: pulseTimer; interval: 300000; repeat: false; running: true; onTriggered: root.runPulse() }
-  Timer { interval: 60000; running: true; repeat: true; onTriggered: root.clockTick++ }
+  Timer { interval: 60000; running: true; repeat: true; onTriggered: { root.checkDayRollover(); root.clockTick++ } }
   Timer {
     // Keep what is on screen fresh while the panel is open.
     interval: root.view === "match" ? 30000 : (root.hasLiveOnScreen() ? 30000 : 120000)
@@ -253,10 +258,20 @@ Panel {
     calendarOpen = false
     refreshCurrent()
   }
-  function dateStrip() {
-    var out = [], base = new Date(); base.setHours(0, 0, 0, 0)
-    for (var i = -2; i <= 4; i++) { var d = new Date(base); d.setDate(base.getDate() + i); out.push(d) }
-    return out
+  function checkDayRollover() {
+    var now = Model.startOfToday()
+    if (Model.sameLocalDay(now, today)) return
+    var followToday = Model.sameLocalDay(selectedDate, today)
+    today = now
+    if (followToday) selectedDate = now
+    if (opened) refreshCurrent()
+  }
+  function dayOffset(n) {
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate() + n)
+  }
+  readonly property bool selectedIsNear: {
+    var rel = Math.round((selectedDate - today) / 86400000)
+    return rel >= -1 && rel <= 1
   }
   function calendarDays() {
     var first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
@@ -646,7 +661,7 @@ Panel {
               }
             }
 
-            // ---- tab: today (date strip) ----
+            // ---- tab: today (yesterday / today / tomorrow) ----
             Column {
               visible: root.tab === "today"
               width: parent.width
@@ -655,44 +670,44 @@ Panel {
                 width: parent.width
                 spacing: Style.space(4)
                 Repeater {
-                  model: root.dateStrip()
+                  model: [-1, 0, 1]
                   delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool active: Model.sameLocalDay(modelData, root.selectedDate)
-                    readonly property int rel: Model.relativeDay(modelData)
-                    width: (bodyColumn.width - Style.space(4) * 7 - calButton.width) / 7
-                    height: Style.space(40)
+                    required property int modelData
+                    readonly property date day: root.dayOffset(modelData)
+                    readonly property bool active: Model.sameLocalDay(day, root.selectedDate)
+                    width: (bodyColumn.width - Style.space(4) * 3 - calButton.width) / 3
+                    height: Style.space(42)
                     radius: Style.cornerRadius
-                    color: active ? root.tint(root.accent, 0.22) : (dayMouse.containsMouse ? root.tint(root.fg, 0.08) : "transparent")
+                    color: active ? root.tint(root.accent, 0.22) : (dayMouse.containsMouse ? root.tint(root.fg, 0.08) : root.tint(root.fg, 0.035))
                     border.width: 1
-                    border.color: active ? root.accent : root.tint(root.fg, 0.08)
+                    border.color: active ? root.accent : root.tint(root.fg, 0.10)
+                    Behavior on color { ColorAnimation { duration: Style.duration(120) } }
                     Column {
                       anchors.centerIn: parent
                       PText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: rel === 0 ? "Today" : Model.shortDays[modelData.getDay()]
-                        font.pixelSize: Style.font.caption
-                        font.bold: rel === 0
-                        color: active ? root.accent : Commons.Color.muted
-                      }
-                      PText {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: modelData.getDate() + " " + Model.shortMonths[modelData.getMonth()]
+                        text: ["Yesterday", "Today", "Tomorrow"][modelData + 1]
                         font.pixelSize: Style.font.bodySmall
                         font.bold: active
                         color: active ? root.accent : root.fg
                       }
+                      PText {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: Model.shortDays[day.getDay()] + " " + day.getDate() + " " + Model.shortMonths[day.getMonth()]
+                        font.pixelSize: Style.font.caption
+                        color: active ? root.accent : Commons.Color.muted
+                      }
                     }
-                    MouseArea { id: dayMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pickDate(modelData) }
+                    MouseArea { id: dayMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pickDate(day) }
                   }
                 }
                 Button {
                   id: calButton
                   iconText: "󰃭"
-                  tooltipText: "Pick a date"
+                  tooltipText: "Pick another date"
                   bordered: true
-                  selected: root.calendarOpen
-                  height: Style.space(40)
+                  selected: root.calendarOpen || !root.selectedIsNear
+                  height: Style.space(42)
                   onClicked: { root.calendarMonth = new Date(root.selectedDate.getFullYear(), root.selectedDate.getMonth(), 1); root.calendarOpen = !root.calendarOpen }
                 }
               }
@@ -729,7 +744,7 @@ Panel {
                     delegate: Rectangle {
                       required property var modelData
                       readonly property bool active: Model.sameLocalDay(modelData.date, root.selectedDate)
-                      readonly property bool isToday: Model.relativeDay(modelData.date) === 0
+                      readonly property bool isToday: Model.sameLocalDay(modelData.date, root.today)
                       width: (calGrid.width - Style.space(18)) / 7
                       height: Style.space(30)
                       radius: Style.cornerRadius
@@ -754,7 +769,7 @@ Panel {
                   onClicked: root.liveOnly = true
                 }
                 PText {
-                  text: Model.formatDayLabel(root.selectedDate)
+                  text: { root.today; return Model.formatDayLabel(root.selectedDate) }
                   color: Commons.Color.muted
                   font.pixelSize: Style.font.bodySmall
                   anchors.verticalCenter: parent.verticalCenter
@@ -875,7 +890,7 @@ Panel {
 
             // ---- week & fixtures: grouped by day ----
             Repeater {
-              model: (root.tab === "week" || root.tab === "fixtures") ? Model.groupByDay(root.currentData) : []
+              model: root.today && (root.tab === "week" || root.tab === "fixtures") ? Model.groupByDay(root.currentData) : []
               delegate: Column {
                 required property var modelData
                 width: bodyColumn.width

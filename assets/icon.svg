@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="pitch" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22a45d"/><stop offset="1" stop-color="#14713d"/>
+    </linearGradient>
+    <radialGradient id="shade" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.7" stop-color="#eef1f0"/><stop offset="1" stop-color="#c9d0cc"/>
+    </radialGradient>
+    <clipPath id="ball"><circle cx="64" cy="64" r="40"/></clipPath>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#pitch)"/>
+  <g stroke="#ffffff" stroke-opacity="0.22" stroke-width="2.5" fill="none">
+    <line x1="4" y1="64" x2="124" y2="64"/>
+    <circle cx="64" cy="64" r="50"/>
+  </g>
+  <circle cx="64" cy="67" r="40" fill="#000" fill-opacity="0.22"/>
+  <circle cx="64" cy="64" r="40" fill="url(#shade)"/>
+  <g clip-path="url(#ball)">
+    <polygon points="64.00,51.00 76.36,59.98 71.64,74.52 56.36,74.52 51.64,59.98" fill="#111"/><polygon points="71.05,17.29 75.41,30.71 64.00,39.00 52.59,30.71 56.95,17.29" fill="#111"/><polygon points="110.60,56.27 99.19,64.57 87.78,56.27 92.14,42.86 106.24,42.86" fill="#111"/><polygon points="85.75,105.93 74.34,97.64 78.69,84.23 92.80,84.23 97.16,97.64" fill="#111"/><polygon points="30.84,97.64 35.20,84.23 49.31,84.23 53.66,97.64 42.25,105.93" fill="#111"/><polygon points="21.76,42.86 35.86,42.86 40.22,56.27 28.81,64.57 17.40,56.27" fill="#111"/>
+      </g>
+  <circle cx="64" cy="64" r="40" fill="none" stroke="#0c3d22" stroke-width="2"/>
+</svg>

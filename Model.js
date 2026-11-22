@@ -302,6 +302,11 @@ function formatMatchTime(value) {
 var shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 var shortDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
+function startOfToday() {
+  var now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 function relativeDay(date) {
   var now = new Date()
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate())

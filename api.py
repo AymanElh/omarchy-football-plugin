@@ -1153,10 +1153,17 @@ def cached_logo(url):
         return ""
 
 
+PLUGIN_ICON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.png")
+
+
 def notify(title, body, urgency="normal", icon=""):
+    # Omarchy's toast shows the image-path hint as the picture; a file path
+    # given as the app icon (-i) is ignored there and falls back to a letter.
+    # Use the team crest when there is one, otherwise the plugin icon.
+    image = icon if icon and os.path.exists(icon) else PLUGIN_ICON
     command = ["notify-send", "-a", "Football", "-u", urgency]
-    if icon:
-        command += ["-i", icon]
+    if os.path.exists(image):
+        command += ["-h", "string:image-path:" + image]
     command += ["--", title[:120], body[:300]]
     try:
         subprocess.run(command, timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
