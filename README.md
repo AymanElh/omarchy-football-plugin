@@ -14,7 +14,7 @@ Your teams' next kick-off or live score sits in the bar (e.g. `● Barcelona 2-1
   * **Matches:** step through days with the ‹ › arrows (or ← → keys), click the date for a calendar, and filter to *Live*. Games are grouped by competition, with live games first.
   * **Week:** the next 7 days across your competitions.
   * **My teams:** upcoming fixtures and recent results (with W/D/L), for all followed teams or one at a time.
-  * **Fixtures:** the next 3 weeks for one competition.
+  * **Fixtures:** every remaining scheduled match of a competition up to the end of the season, 10 match days at a time with *Show more*.
   * **Table:** standings with qualification and relegation zones, and your teams highlighted.
 * **Match centre:** score and scorers, a goals/cards/substitutions timeline, statistics, and **lineups on a pitch** with formation, shirt numbers, goals, cards and substitutions.
 * **55 curated competitions:** grouped into Europe, Africa (Botola Pro, AFCON and its qualifiers, CAF Champions League, CAF Confederation Cup…), Asia, the Americas and international tournaments. Other ESPN competitions are found by searching.

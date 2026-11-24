@@ -43,6 +43,7 @@ Panel {
   property bool liveOnly: false
   property string teamFilter: ""
   property string fixturesLeague: selectedLeagues.length ? selectedLeagues[0] : ""
+  property int fixturesDays: 10            // match days loaded in Fixtures; "Show more" adds 10
   property string tableLeague: selectedLeagues.length ? selectedLeagues[0] : ""
   property int clockTick: 0
 
@@ -112,7 +113,7 @@ Panel {
     if (t === "today") return "day|" + selectedLeagues.join(",") + "|" + Model.formatDateParam(selectedDate)
     if (t === "week") return "week|" + selectedLeagues.join(",") + "|" + weekRange()
     if (t === "teams") return "teams|" + Model.teamSpecs(favoriteTeams)
-    if (t === "fixtures") return "fix|" + fixturesLeague
+    if (t === "fixtures") return "fix|" + fixturesLeague + "|" + fixturesDays
     if (t === "table") return "table|" + tableLeague
     return ""
   }
@@ -120,15 +121,31 @@ Panel {
     var parts = key.split("|")
     if (parts[0] === "day" || parts[0] === "week") return ["matches", parts[1], parts[2], ""]
     if (parts[0] === "teams") return ["team-matches", parts[1], "6", "10"]
-    if (parts[0] === "fix") return ["league-matches", parts[1], "21"]
+    if (parts[0] === "fix") return ["league-matches", parts[1], parts[2]]
     if (parts[0] === "table") return ["standings", parts[1]]
     if (parts[0] === "md") return ["match-details", parts[1], parts[2]]
     return []
   }
   readonly property string currentKey: keyFor(tab)
-  readonly property var currentEntry: { cacheVersion; return cache[currentKey] || null }
-  readonly property var currentData: currentEntry && Array.isArray(currentEntry.data) ? currentEntry.data : []
+  // While "Show more" loads, keep showing the shorter fixtures list.
+  readonly property var currentEntry: {
+    cacheVersion
+    var e = cache[currentKey] || null
+    if (!e && tab === "fixtures") {
+      for (var n = fixturesDays - 10; n >= 10 && !e; n -= 10) e = cache["fix|" + fixturesLeague + "|" + n] || null
+    }
+    return e
+  }
+  readonly property var currentData: {
+    if (!currentEntry) return []
+    var d = currentEntry.data
+    if (Array.isArray(d)) return d
+    return d && Array.isArray(d.matches) ? d.matches : []
+  }
+  readonly property int fixturesDaysLeft: (tab === "fixtures" && currentEntry && currentEntry.data && currentEntry.data.daysLeft) || 0
+  readonly property int fixturesDaysShown: (tab === "fixtures" && currentEntry && currentEntry.data && currentEntry.data.daysShown) || 0
   readonly property bool currentLoading: currentEntry === null && (listFetcher.busy || tableFetcher.busy)
+  readonly property bool listLoadingMore: { cacheVersion; return tab === "fixtures" && !cache[currentKey] && listFetcher.busy }
   readonly property bool refreshing: listFetcher.busy || tableFetcher.busy || detailsFetcher.busy
 
   function store(key, data) {
@@ -288,7 +305,8 @@ Panel {
     }
     return cells
   }
-  function setFixturesLeague(id) { fixturesLeague = id; refreshCurrent() }
+  function setFixturesLeague(id) { fixturesLeague = id; fixturesDays = 10; refreshCurrent() }
+  function moreFixtures() { fixturesDays += 10; refreshCurrent() }
   function setTableLeague(id) { tableLeague = id; refreshCurrent() }
 
   function isFavorite(id) { return favoriteIds.indexOf(String(id)) >= 0 }
@@ -416,7 +434,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    centerOnBar: false
+    centerOnBar: true
     contentWidth: popup.fittedContentWidth(Style.space(560))
     contentHeight: popup.fittedContentHeight(header.height + Style.space(10) + bodyColumn.implicitHeight, Style.space(700))
 
@@ -852,7 +870,7 @@ Panel {
                   return root.liveOnly ? "No live matches right now." : "No matches on this day in your competitions."
                 if (root.tab === "week" && root.currentData.length === 0) return "No matches in the next 7 days."
                 if (root.tab === "teams" && root.teamTabMatches("upcoming").length === 0 && root.teamTabMatches("result").length === 0) return "No matches found."
-                if (root.tab === "fixtures" && root.currentData.length === 0) return "No fixtures in the next 3 weeks."
+                if (root.tab === "fixtures" && root.currentData.length === 0) return "No fixtures left this season."
                 if (root.tab === "table" && root.currentData.length === 0) return "No table for this competition (cups and knockouts have none)."
                 return ""
               }
@@ -933,6 +951,34 @@ Panel {
                   }
                 }
               }
+            }
+
+            // ---- fixtures: load further match days ----
+            Rectangle {
+              visible: root.tab === "fixtures" && root.fixturesDaysLeft > root.fixturesDaysShown
+              width: parent.width
+              height: Style.space(36)
+              radius: Style.cornerRadius
+              color: moreMouse.containsMouse ? root.tint(root.accent, 0.18) : root.tint(root.fg, 0.04)
+              border.width: 1
+              border.color: root.tint(root.accent, 0.5)
+              PText {
+                anchors.centerIn: parent
+                text: root.listLoadingMore ? "Loading…"
+                      : "Show more  ·  " + (root.fixturesDaysLeft - root.fixturesDaysShown) + " match days left"
+                color: root.accent
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+              }
+              MouseArea { id: moreMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (!root.listLoadingMore) root.moreFixtures() }
+            }
+            PText {
+              visible: root.tab === "fixtures" && root.fixturesDaysLeft > 0 && root.fixturesDaysLeft <= root.fixturesDaysShown
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
+              text: "That's every scheduled match. Knock-out ties appear once they're drawn."
+              color: Commons.Color.muted
+              font.pixelSize: Style.font.caption
             }
 
             // ---- my teams: upcoming + results ----
