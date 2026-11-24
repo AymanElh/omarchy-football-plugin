@@ -492,31 +492,59 @@ def cmd_matches(leagues, date_text, favorite_ids):
     print(json.dumps(output))
 
 
-def cmd_league_matches(league, days=21):
+CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues"
+
+
+def league_match_days(league):
+    """Every scheduled match day left this season (YYYYMMDD, local order)."""
+    data = fetch_json(f"{CORE}/{league}/calendar/ondays?lang=en&region=us", ttl=6 * 3600)
+    dates = ((data or {}).get("eventDate") or {}).get("dates") or []
+    today = datetime.now().strftime("%Y%m%d")
+    days = sorted({str(d)[:10].replace("-", "") for d in dates if re.match(r"\d{4}-\d{2}-\d{2}", str(d))})
+    return [d for d in days if d >= today]
+
+
+def cmd_league_matches(league, count=10):
+    """Remaining fixtures of a competition, `count` match days at a time.
+
+    Prints {"matches": [...], "daysShown": n, "daysLeft": total}.  The season
+    calendar lists every scheduled match day, so this reaches the end of the
+    season (knock-out ties appear once they are drawn)."""
     if not league:
-        print("[]")
+        print(json.dumps({"matches": [], "daysShown": 0, "daysLeft": 0}))
         return
-    days = max(1, min(int(days), 45))
+    count = max(1, min(int(count), 120))
     now = datetime.now(timezone.utc)
     if league == BOTOLA:
-        limit = now + timedelta(days=days)
-        matches = [m for m in fetch_botola_matches()
-                   if (d := parse_date(m["date"])) and now - timedelta(hours=3) <= d <= limit]
-    else:
-        today = datetime.now().date()
-        batches = parallel(lambda d: fetch_scoreboard(league, d), date_range(today - timedelta(days=1), days + 1))
-        matches, seen = [], set()
-        for batch in batches:
-            for m in batch:
-                if m["id"] in seen:
-                    continue
-                d = parse_date(m["date"])
-                if m["state"] == "post" and d and d < now - timedelta(hours=12):
-                    continue
-                seen.add(m["id"])
-                matches.append(m)
+        upcoming = [m for m in fetch_botola_matches()
+                    if (d := parse_date(m["date"])) and d >= now - timedelta(hours=3)]
+        upcoming.sort(key=lambda m: m.get("date") or "")
+        days = []
+        for m in upcoming:
+            d = (parse_date(m["date"]) or now).astimezone().strftime("%Y%m%d")
+            if d not in days:
+                days.append(d)
+        keep = set(days[:count])
+        matches = [m for m in upcoming if (parse_date(m["date"]) or now).astimezone().strftime("%Y%m%d") in keep]
+        print(json.dumps({"matches": matches, "daysShown": min(count, len(days)), "daysLeft": len(days)}))
+        return
+    days = league_match_days(league)
+    if not days:
+        # No season calendar: fall back to scanning the next three weeks.
+        days = [d.strftime("%Y%m%d") for d in date_range(datetime.now().date(), 22)]
+    batches = parallel(lambda d: fetch_scoreboard(league, d), days[:count])
+    matches, seen = [], set()
+    for batch in batches:
+        for m in batch:
+            if m["id"] in seen:
+                continue
+            d = parse_date(m["date"])
+            if m["state"] == "post" and d and d < now - timedelta(hours=12):
+                continue
+            seen.add(m["id"])
+            matches.append(m)
     matches.sort(key=lambda m: m.get("date") or "")
-    print(json.dumps(matches))
+    print(json.dumps({"matches": matches, "daysShown": min(count, len(days)), "daysLeft": len(days)}))
 
 
 # --------------------------------------------------------------------------
@@ -1355,7 +1383,7 @@ def main():
     if command == "matches":
         cmd_matches(arg(0).split(","), arg(1, datetime.now().strftime("%Y%m%d")), arg(2).split(","))
     elif command == "league-matches":
-        cmd_league_matches(arg(0), arg(1, 21))
+        cmd_league_matches(arg(0), arg(1, 10))
     elif command == "team-matches":
         cmd_team_matches(arg(0), arg(1, 5), arg(2, 10))
     elif command == "pulse":
