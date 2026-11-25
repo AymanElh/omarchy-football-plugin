@@ -61,6 +61,7 @@ Panel {
   readonly property var matchDetails: { cacheVersion; return matchKey && cache[matchKey] ? cache[matchKey].data : null }
   readonly property var activeMatch: (matchDetails && matchDetails.id) ? matchDetails : currentMatchItem
   readonly property var activeLineup: (matchDetails && matchDetails.lineup) ? matchDetails.lineup : null
+  readonly property var tvRows: (matchDetails && Array.isArray(matchDetails.tv)) ? matchDetails.tv : []
   readonly property bool hasLineup: Boolean(activeLineup && activeLineup.available)
 
   // settings view
@@ -1503,6 +1504,14 @@ Panel {
                 }
 
                 PText {
+                  visible: root.tvRows.length > 0 && root.tvRows[0].local
+                  width: parent.width
+                  horizontalAlignment: Text.AlignHCenter
+                  text: root.tvRows.length ? "󰔂  " + root.tvRows[0].channels.join(" · ") : ""
+                  font.pixelSize: Style.font.caption
+                  color: root.accent
+                }
+                PText {
                   visible: !!(root.activeMatch && root.activeMatch.venue)
                   width: parent.width
                   horizontalAlignment: Text.AlignHCenter
@@ -1517,11 +1526,11 @@ Panel {
               width: parent.width
               spacing: Style.space(4)
               Repeater {
-                model: [{ id: "timeline", label: "Timeline", icon: "󰔟" }, { id: "lineup", label: "Lineups", icon: "󰋑" }, { id: "stats", label: "Stats", icon: "󰄨" }]
+                model: [{ id: "timeline", label: "Timeline", icon: "󰔟" }, { id: "lineup", label: "Lineups", icon: "󰋑" }, { id: "stats", label: "Stats", icon: "󰄨" }, { id: "tv", label: "TV", icon: "󰔂" }]
                 delegate: Rectangle {
                   required property var modelData
                   readonly property bool active: root.matchTab === modelData.id
-                  width: (bodyColumn.width - Style.space(8)) / 3
+                  width: (bodyColumn.width - Style.space(12)) / 4
                   height: Style.space(32)
                   radius: Style.cornerRadius
                   color: active ? root.tint(root.accent, 0.20) : (mtMouse.containsMouse ? root.tint(root.fg, 0.08) : root.tint(root.fg, 0.035))
@@ -1546,6 +1555,7 @@ Panel {
                 if (root.matchTab === "timeline" && (!d.events || d.events.length === 0)) return pre ? "The match hasn't started yet. Goals, cards and substitutions will appear here." : "No key events recorded."
                 if (root.matchTab === "stats" && (!d.stats || d.stats.length === 0)) return pre ? "Statistics appear once the match kicks off." : "No statistics for this match."
                 if (root.matchTab === "lineup" && !root.hasLineup) return "Lineups are usually announced about an hour before kick-off."
+                if (root.matchTab === "tv" && root.tvRows.length === 0) return "No TV information for this competition."
                 return ""
               }
               visible: message !== ""
@@ -1562,6 +1572,65 @@ Panel {
                 wrapMode: Text.WordWrap
                 text: matchState.message
                 color: Commons.Color.muted
+              }
+            }
+
+            // ---- tv ----
+            Column {
+              visible: root.matchTab === "tv" && root.tvRows.length > 0
+              width: parent.width
+              spacing: Style.space(6)
+              Repeater {
+                model: root.matchTab === "tv" ? root.tvRows : []
+                delegate: Rectangle {
+                  required property var modelData
+                  width: bodyColumn.width
+                  height: tvRow.implicitHeight + Style.space(16)
+                  radius: Style.cornerRadius
+                  color: modelData.local ? root.tint(root.accent, 0.10) : root.tint(root.fg, 0.035)
+                  border.width: 1
+                  border.color: modelData.local ? root.tint(root.accent, 0.6) : root.tint(root.fg, 0.08)
+                  Row {
+                    id: tvRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: Style.space(10)
+                    anchors.rightMargin: Style.space(10)
+                    spacing: Style.space(8)
+                    Column {
+                      width: Style.space(120)
+                      anchors.verticalCenter: parent.verticalCenter
+                      PText { text: modelData.region; font.bold: true; font.pixelSize: Style.font.bodySmall; color: modelData.local ? root.accent : root.fg; width: parent.width }
+                      PText { visible: modelData.local; text: "Your region"; font.pixelSize: Style.font.caption; color: Commons.Color.muted }
+                    }
+                    Flow {
+                      width: parent.width - Style.space(128)
+                      spacing: Style.space(5)
+                      anchors.verticalCenter: parent.verticalCenter
+                      Repeater {
+                        model: modelData.channels
+                        delegate: Rectangle {
+                          required property string modelData
+                          width: chText.implicitWidth + Style.space(14)
+                          height: Style.space(24)
+                          radius: height / 2
+                          color: root.tint(root.fg, 0.06)
+                          border.width: 1
+                          border.color: root.tint(root.fg, 0.14)
+                          PText { id: chText; anchors.centerIn: parent; text: "󰔂 " + modelData; font.pixelSize: Style.font.caption; elide: Text.ElideNone }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              PText {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                text: "Usual rights holders for this competition; USA comes live from ESPN. Check local listings for this match."
+                color: Commons.Color.muted
+                font.pixelSize: Style.font.caption
               }
             }
 
