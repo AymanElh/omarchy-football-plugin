@@ -43,7 +43,29 @@ BarWidget {
     anchors.fill: parent
     bar: root.bar
     text: root.label
-    labelVisible: true
+    labelVisible: false
+    implicitWidth: vertical ? barSize : content.implicitWidth + scaledHorizontalMargin * 2
+    implicitHeight: vertical ? content.implicitHeight + scaledVerticalPadding * 2 : barSize
+    Row {
+      id: content
+      anchors.centerIn: parent
+      spacing: Style.space(6)
+      scale: button.pressScale
+      PText {
+        text: "\uf1e3"
+        color: button.foreground
+        font.pixelSize: button.fontSize
+        anchors.verticalCenter: parent.verticalCenter
+      }
+      PText {
+        visible: !button.vertical
+        text: root.label
+        color: button.foreground
+        font.family: button.fontFamily
+        font.pixelSize: button.fontSize
+        anchors.verticalCenter: parent.verticalCenter
+      }
+    }
     horizontalMargin: 8.75
     verticalPadding: 8.75
     onPressed: function(mouseButton) {

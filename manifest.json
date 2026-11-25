@@ -2,22 +2,35 @@
   "schemaVersion": 1,
   "id": "ayman.football-matches",
   "name": "Football Matches",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Ayman",
-  "description": "Selected football leagues, one favourite team, and its next match in the bar.",
-  "kinds": ["bar-widget"],
-  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "description": "Live football scores, fixtures and tables, several favourite teams, lineups on a pitch and real-time goal alerts.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
   "barWidget": {
     "displayName": "Football",
-    "description": "Follow selected leagues and your favourite team's next match.",
+    "description": "Follow your teams and competitions with live scores, lineups and real-time alerts.",
     "category": "Info",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "selectedLeagues": ["esp.1", "eng.1", "fra.1", "ger.1", "uefa.champions", "caf.champions"],
-      "favoriteTeam": null,
+      "selectedLeagues": [
+        "esp.1",
+        "eng.1",
+        "uefa.champions",
+        "caf.champions",
+        "caf.nations_qual",
+        "mar.1"
+      ],
+      "favoriteTeams": [],
+      "alertsEnabled": true,
       "remindersEnabled": true,
-      "reminderMinutes": 15
+      "reminderMinutes": 15,
+      "leagueAlertMode": "goals"
     }
   }
 }
