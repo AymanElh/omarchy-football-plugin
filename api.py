@@ -1120,6 +1120,98 @@ def fetch_fotmob_match_details(match_id):
     }
 
 
+# --------------------------------------------------------------------------
+# TV: where to watch
+# --------------------------------------------------------------------------
+
+# Usual rights holders for the big competitions in a few key regions (current
+# rights cycles).  ESPN's live listing replaces the USA row when it has one.
+_UEFA_CLUB = {
+    "MENA": ["beIN Sports"], "UK": ["TNT Sports", "Amazon Prime Video"], "USA": ["CBS", "Paramount+"],
+    "Spain": ["Movistar+"], "France": ["Canal+"], "Germany": ["DAZN", "Amazon Prime Video"],
+    "Italy": ["Sky Sport", "Amazon Prime Video"], "Brazil": ["TNT Sports", "HBO Max"],
+    "Sub-Saharan Africa": ["Canal+ Afrique", "SuperSport"],
+}
+_CAF = {"MENA": ["beIN Sports"], "France": ["beIN Sports"], "Sub-Saharan Africa": ["SuperSport", "Canal+ Afrique"]}
+TV_BY_LEAGUE = {
+    "uefa.champions": _UEFA_CLUB,
+    "uefa.europa": {**_UEFA_CLUB, "UK": ["TNT Sports"], "Germany": ["RTL+", "Nitro"], "Italy": ["Sky Sport", "DAZN"]},
+    "uefa.europa.conf": {**_UEFA_CLUB, "UK": ["TNT Sports"], "Germany": ["RTL+", "Nitro"], "Italy": ["Sky Sport", "DAZN"]},
+    "eng.1": {"MENA": ["beIN Sports"], "UK": ["Sky Sports", "TNT Sports"], "USA": ["NBC", "Peacock"],
+              "Spain": ["DAZN"], "France": ["Canal+"], "Germany": ["Sky Sport"], "Italy": ["Sky Sport"],
+              "India": ["Star Sports", "JioHotstar"], "Brazil": ["ESPN", "Disney+"],
+              "Sub-Saharan Africa": ["SuperSport", "Canal+ Afrique"]},
+    "esp.1": {"MENA": ["beIN Sports"], "Spain": ["Movistar+", "DAZN"], "UK": ["Premier Sports"],
+              "USA": ["ESPN+", "ESPN"], "France": ["beIN Sports"], "Germany": ["DAZN"], "Italy": ["DAZN"],
+              "Brazil": ["ESPN", "Disney+"]},
+    "ita.1": {"MENA": ["beIN Sports"], "Italy": ["DAZN", "Sky Sport"], "UK": ["TNT Sports"],
+              "USA": ["CBS Sports", "Paramount+"], "France": ["beIN Sports"], "Spain": ["DAZN"]},
+    "ger.1": {"Germany": ["Sky Sport", "DAZN"], "UK": ["Sky Sports"], "USA": ["ESPN+"],
+              "France": ["beIN Sports"], "Spain": ["Movistar+"]},
+    "fra.1": {"France": ["Ligue 1+", "beIN Sports"], "MENA": ["beIN Sports"], "USA": ["beIN Sports"],
+              "Spain": ["DAZN"]},
+    "mar.1": {"Morocco": ["Arryadia", "Al Aoula"]},
+    "caf.nations": _CAF, "caf.nations_qual": _CAF, "caf.champions": _CAF, "caf.confed": _CAF,
+    "fifa.worldq.caf": _CAF,
+    "fifa.world": {"MENA": ["beIN Sports"], "UK": ["BBC", "ITV"], "USA": ["FOX", "Telemundo"],
+                   "Spain": ["RTVE", "DAZN"], "France": ["M6", "beIN Sports"]},
+    "usa.1": {"Worldwide": ["Apple TV"]},
+    "ksa.1": {"Saudi Arabia": ["Thmanyah"], "UK": ["TNT Sports"]},
+}
+# National channels that show their own national team.
+NATIONAL_TV = {"Morocco": ["Arryadia", "Al Aoula"], "Egypt": ["ON Sport"], "Algeria": ["EPTV"],
+               "Tunisia": ["Watania"], "Saudi Arabia": ["SSC"]}
+
+# Put the viewer's own region first, guessed from the system timezone.
+_TZ_REGION = [("Africa/Casablanca", ["Morocco", "MENA"]), ("Africa/Cairo", ["MENA"]), ("Africa/Algiers", ["MENA"]),
+              ("Africa/Tunis", ["MENA"]), ("Asia/Riyadh", ["Saudi Arabia", "MENA"]), ("Asia/Dubai", ["MENA"]),
+              ("Asia/Qatar", ["MENA"]), ("Africa/", ["Sub-Saharan Africa"]), ("Europe/London", ["UK"]),
+              ("Europe/Madrid", ["Spain"]), ("Europe/Paris", ["France"]), ("Europe/Berlin", ["Germany"]),
+              ("Europe/Rome", ["Italy"]), ("America/Sao_Paulo", ["Brazil"]), ("America/", ["USA"]),
+              ("Asia/Kolkata", ["India"])]
+
+
+def local_regions():
+    zone = os.environ.get("TZ", "")
+    if not zone:
+        try:
+            zone = os.path.realpath("/etc/localtime").split("zoneinfo/", 1)[1]
+        except (IndexError, OSError):
+            zone = ""
+    for prefix, regions in _TZ_REGION:
+        if zone.startswith(prefix):
+            return regions
+    return []
+
+
+def tv_listing(league, home, away, espn_us):
+    rows = {region: list(chs) for region, chs in (TV_BY_LEAGUE.get(league) or {}).items()}
+    if espn_us:
+        rows["USA"] = espn_us
+    for team in (home, away):
+        for country, channels in NATIONAL_TV.items():
+            if team == country:
+                rows[country] = list(dict.fromkeys(channels + rows.get(country, [])))
+    mine = local_regions()
+    usual = ["Worldwide", "Morocco", "MENA", "Saudi Arabia", "UK", "USA", "Spain", "France", "Germany", "Italy",
+             "Brazil", "India", "Sub-Saharan Africa"]
+    order = sorted(rows, key=lambda r: (mine.index(r) if r in mine else len(mine),
+                                        usual.index(r) if r in usual else len(usual), r))
+    return [{"region": r, "channels": rows[r], "local": r in mine} for r in order if rows[r]]
+
+
+def espn_us_broadcasts(data):
+    names = []
+    for b in (data or {}).get("broadcasts") or []:
+        if str(b.get("region") or "us") != "us":
+            continue
+        media = b.get("media") or {}
+        name = media.get("shortName") or media.get("name") or ""
+        if name and name not in names:
+            names.append(name)
+    return names[:4]
+
+
 def cmd_match_details(league, match_id):
     if not re.fullmatch(r"[0-9]{1,12}", str(match_id or "")):
         print("{}")
@@ -1128,6 +1220,11 @@ def cmd_match_details(league, match_id):
         result = fetch_fotmob_match_details(match_id)
     else:
         result = fetch_espn_match_details(league or "all", match_id)
+    if result:
+        espn_us = []
+        if league != BOTOLA:
+            espn_us = espn_us_broadcasts(fetch_json(f"{BASE}/{league or 'all'}/summary?event={match_id}", ttl=15))
+        result["tv"] = tv_listing(result.get("leagueId") or league, result.get("home", ""), result.get("away", ""), espn_us)
     print(json.dumps(result or {}))
 
 
