@@ -229,6 +229,7 @@ Panel {
   }
   Fetcher {
     id: pulseFetcher; scriptPath: root.scriptPath
+    timeoutMs: 55000   // api.py pulse is allowed 45 s
     onDone: function(key, text) {
       var data = root.parse(text)
       if (!data) { pulseTimer.interval = 60000; pulseTimer.restart(); return }
