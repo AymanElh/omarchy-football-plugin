@@ -1,25 +1,26 @@
 # Football Matches
 
-A native Omarchy status-bar widget for tracking live soccer scores, fixture schedules, and your favourite team.
+A native Omarchy status-bar widget for live football scores, fixtures, tables and real-time alerts for the teams you follow.
 
-Pin your team's next kickoff or live score directly to your top bar (e.g. `Barça vs Real Madrid · LIVE 2-1`), and click to open a full match browser with calendar navigation, multi-league filtering, and desktop reminders.
+Your teams' next kick-off or live score sits in the bar (e.g. `● Barcelona 2-1 Villarreal 63'`). Click it to open a match browser with a match centre that shows the timeline, stats and lineups drawn on a pitch.
 
 ---
 
 ## Features
 
-* **Status Bar Integration:** Shows your favourite club's next upcoming match or live score directly in the Omarchy bar.
-* **4 Match Browsing Modes:**
-  * **By Day:** View all matches for any date, with a built-in calendar picker and daily chevrons.
-  * **Next 7 Days:** See the upcoming week of fixtures across all your selected leagues.
-  * **By Team:** Track your favourite club's next 10 fixtures across all competitions (domestic league, domestic cups, and continental tournaments like UEFA Champions League or CAF Champions League).
-  * **By League:** Browse 30 days of upcoming fixtures for any single selected competition, including round numbers.
-* **Smart Team & League Search:**
-  * Search across dozens of domestic leagues and tournaments (La Liga, Premier League, Bundesliga, Serie A, Ligue 1, Botola Pro, MLS, and more).
-  * Fast team search with popular club priority and aliases (e.g. searching `barca`, `real`, `wac`, or `raja`).
-* **Match Reminders:** Sends a desktop notification via `notify-send` before your favourite team kicks off (customizable, defaults to 15 minutes).
-* **Local Timezone Aware:** All match times automatically convert to your local system time.
-* **Zero External Dependencies:** Built with QML and Python 3 standard library only — no `pip` packages required.
+* **Follow several teams:** clubs and national teams, as many as you like. The bar shows whichever plays next, and a live match always takes priority.
+* **Every competition a team plays in:** league, domestic cups, continental cups, friendlies and national-team qualifiers (for example Morocco in AFCON Qualifying) all come from one cross-competition schedule.
+* **Five tabs:**
+  * **Matches:** step through days with the ‹ › arrows (or ← → keys), click the date for a calendar, and filter to *Live*. Games are grouped by competition, with live games first.
+  * **Week:** the next 7 days across your competitions.
+  * **My teams:** upcoming fixtures and recent results (with W/D/L), for all followed teams or one at a time.
+  * **Fixtures:** every remaining scheduled match of a competition up to the end of the season, 10 match days at a time with *Show more*.
+  * **Table:** standings with qualification and relegation zones, and your teams highlighted.
+* **Match centre:** score and scorers, a goals/cards/substitutions timeline, statistics, and **lineups on a pitch** with formation, shirt numbers, goals, cards and substitutions, plus a **TV** tab with where to watch by region (your region first, guessed from the system timezone; the USA row comes live from ESPN, the others are the usual rights holders for that competition).
+* **55 curated competitions:** grouped into Europe, Africa (Botola Pro, AFCON and its qualifiers, CAF Champions League, CAF Confederation Cup…), Asia, the Americas and international tournaments. Other ESPN competitions are found by searching.
+* **Real-time alerts:** kick-off, goals (with scorer), disallowed goals, red cards, half-time and full-time for your teams, plus kick-off reminders. Notifications show the team crest (or a football glyph in your theme colours). Alerts for other matches in your competitions are optional. The widget polls every 30 seconds while a followed match is live, and every few minutes otherwise.
+* **Fast:** every response is cached on disk for a short time, other tabs are prefetched in the background, and team schedules take 2 requests instead of a 35-day scoreboard scan, and fixtures read the season calendar instead of scanning day by day.
+* **No dependencies:** QML plus Python 3's standard library.
 
 ---
 
@@ -33,62 +34,80 @@ omarchy plugin add https://github.com/AymanElh/omarchy-football-plugin.git --ena
 
 ### Option 2: Manual Installation
 
-1. Clone or copy the repository into your Omarchy plugins directory:
-   ```sh
-   git clone https://github.com/AymanElh/omarchy-football-plugin.git ~/.config/omarchy/plugins/ayman.football-matches
-   ```
-
-2. Reload plugins and enable the widget:
-   ```sh
-   omarchy-shell shell rescanPlugins
-   omarchy plugin enable ayman.football-matches right
-   ```
+```sh
+git clone https://github.com/AymanElh/omarchy-football-plugin.git ~/.config/omarchy/plugins/ayman.football-matches
+omarchy-shell shell rescanPlugins
+omarchy plugin enable ayman.football-matches right
+```
 
 ---
 
 ## How to Use
 
-### Mouse Controls
-
 | Action | Result |
 | :--- | :--- |
-| **Left Click** | Open / close the match panel |
-| **Middle Click** | Force an immediate data refresh |
+| **Left click** | Open / close the panel |
+| **Middle click** | Refresh now |
+| **Esc** | Back (from settings or the match centre), then close |
 
-### First-Time Setup
-1. Click the **Football** widget in your bar to open the popup.
-2. Click the **Gear icon (⚙)** in the top right to open settings.
-3. Select your favourite leagues (or search for competitions).
-4. Search for your **Favourite team** and click it to pin it to your bar.
-5. (Optional) Toggle **Match reminders** and choose how many minutes before kickoff you'd like a desktop notification.
+**First-time setup:** open the panel and click the gear icon. Follow teams from the popular list or search for any team, pick your competitions, and choose your alert settings.
 
 ---
 
 ## Configuration & Defaults
 
-Settings are saved automatically through Omarchy's settings store (`~/.config/omarchy/shell.json`):
+Settings are saved in Omarchy's settings store (`~/.config/omarchy/shell.json`):
 
-| Setting Key | Type | Default | Description |
+| Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `selectedLeagues` | `array` | `["esp.1", "eng.1", "fra.1", "ger.1", "uefa.champions", "caf.champions"]` | Leagues displayed in matchday views. |
-| `favoriteTeam` | `object` | `null` | The chosen club shown on the bar pill (`id`, `name`, `short`, `leagueId`). |
-| `remindersEnabled` | `boolean` | `true` | Send a desktop notification before your favourite team plays. |
-| `reminderMinutes` | `number` | `15` | Minutes before kickoff to trigger the reminder notification. |
+| `selectedLeagues` | `array` | `["esp.1", "eng.1", "uefa.champions", "caf.champions", "caf.nations_qual", "mar.1"]` | Competitions used by the Matches, Week, Fixtures and Table tabs. |
+| `favoriteTeams` | `array` | `[]` | Followed teams (`id`, `name`, `short`, `logo`, `leagueId`, `national`). A v1 `favoriteTeam` is migrated automatically. |
+| `alertsEnabled` | `boolean` | `true` | Background polling and desktop notifications. |
+| `remindersEnabled` | `boolean` | `true` | Kick-off reminders for followed teams. |
+| `reminderMinutes` | `number` | `15` | Minutes before kick-off for the reminder. |
+| `leagueAlertMode` | `string` | `"goals"` | Alerts for non-followed matches in your competitions: `off`, `goals` (goals & results) or `all`. |
+
+---
+
+## Privacy & network
+
+* Data comes from fixed HTTPS endpoints: ESPN's public soccer API (scores, schedules, standings, search, match details) and FotMob (Botola Pro, plus lineups ESPN lacks).
+* While alerts are enabled, the widget checks for score changes in the background, even when the panel is closed. Turn **Desktop notifications** off in settings to stop it.
+* Cached responses and alert state are kept in `~/.cache/ayman-football/`. Nothing is sent about you: requests carry only team, league and match IDs.
+* Everything downloaded is treated as untrusted: responses are capped at 6 MB (compressed and decompressed), all text is drawn as plain text, notification text has markup neutralised, and only HTTPS crests are downloaded.
+* TV information: the USA row comes live from ESPN's match data; the other regions are the usual rights holders for each competition, kept in `api.py` (`TV_BY_LEAGUE`). They can miss one-off deals, so check local listings.
 
 ---
 
 ## Requirements
 
-* **Omarchy Linux** (with Quickshell / Qt Quick)
+* **Omarchy Linux** (Quickshell / Qt Quick)
 * **Python 3** (standard library only)
-* **`libnotify` / `notify-send`** (installed by default on Omarchy for desktop reminders)
+* **`notify-send`** (libnotify, installed on Omarchy by default)
 
 ---
 
-## Architecture & Data Source
+## Architecture
 
-* **UI Layer:** Written in QML (`BarWidget.qml`, `Panel.qml`) running in Quickshell, following Omarchy design system styles and tokens.
-* **Data Layer:** `api.py` fetches match scoreboards and team calendars asynchronously from ESPN's public soccer endpoints using Python's standard `urllib` and `concurrent.futures`. No background daemon or web server needed.
+* `BarWidget.qml`: the bar pill; it loads the panel.
+* `Panel.qml`: the panel UI and its state, with an in-memory cache that renders the last answer instantly while a refresh runs.
+* `MatchCard.qml`, `PitchView.qml`, `Chip.qml`, `TeamLogo.qml`, `PText.qml`: UI components. All network text is rendered as plain text.
+* `Fetcher.qml`: a request queue around `api.py`; only the newest pending request runs.
+* `Model.js`: the competition catalogue, popular teams and formatting helpers.
+* `tests/test_api.py`: regression tests for the data client (markup-shaped names, download limits).
+* `api.py`: the data client and disk cache. Its `pulse` command computes each team's live or next match and sends notifications by comparing scores against `~/.cache/ayman-football/alerts-state.json`.
+
+---
+
+## Development
+
+```sh
+omarchy plugin validate .                 # manifest check
+python3 -m unittest discover -s tests -v  # regression tests
+omarchy restart shell                     # QML changes need a shell restart to reload
+```
+
+The panel's text is English only for now; strings are not yet in `i18n/` catalogs.
 
 ---
 
