@@ -11,7 +11,6 @@ for every request, so the disk cache is what makes switching tabs fast.  When
 the network fails the last cached copy is served instead.
 """
 import concurrent.futures
-import gzip
 import hashlib
 import json
 import os
@@ -25,6 +24,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from datetime import datetime, timedelta, timezone
 
 # Prefer IPv4: some networks advertise an unreachable IPv6 default route,
@@ -53,7 +53,7 @@ FOTMOB_HEADERS = {
     "Referer": "https://www.fotmob.com/",
     "Accept-Encoding": "gzip",
 }
-MAX_BYTES = 6 * 1024 * 1024
+MAX_BYTES = 6 * 1024 * 1024          # largest response accepted, compressed or not
 FAILURES = []  # URLs that failed with no cached copy during this run
 
 CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "ayman-football")
@@ -135,6 +135,18 @@ def _write_cache(url, data):
         pass
 
 
+def bounded_gunzip(raw, limit=MAX_BYTES):
+    """Decompress gzip data, refusing anything that expands past `limit`."""
+    decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    try:
+        out = decoder.decompress(raw, limit + 1)
+    except zlib.error as exc:
+        raise ValueError("bad gzip data") from exc
+    if len(out) > limit or decoder.unconsumed_tail:
+        raise ValueError("response too large")
+    return out
+
+
 def _download(url, headers, timeout):
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -142,7 +154,7 @@ def _download(url, headers, timeout):
         if len(raw) > MAX_BYTES:
             raise ValueError("response too large")
         if response.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
-            raw = gzip.decompress(raw)
+            raw = bounded_gunzip(raw)
         return json.loads(raw.decode("utf-8"))
 
 
@@ -1281,6 +1293,20 @@ def cached_logo(url):
 PLUGIN_GLYPH = "\uf1e3"  # Nerd Font football, drawn in the theme colours
 
 
+_ENTITY = re.compile(r"&(?=#?\w+;)")
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def plain_text(text, limit):
+    """Neutralise markup in text that comes from the network.
+
+    Omarchy's notification toast can render a body as rich text, so a team or
+    player name shaped like an HTML tag or entity must not reach it as markup."""
+    text = _CONTROL.sub("", str(text or ""))
+    text = text.replace("<", "\u2039").replace(">", "\u203a")
+    return _ENTITY.sub("\uff06", text)[:limit]
+
+
 def notify(title, body, urgency="normal", icon=""):
     # Omarchy's toast shows the image-path hint as a picture and the
     # omarchy-glyph hint as a themed icon. Use the team crest when there is
@@ -1290,7 +1316,7 @@ def notify(title, body, urgency="normal", icon=""):
         command += ["-h", "string:image-path:" + icon]
     else:
         command += ["-h", "string:omarchy-glyph:" + PLUGIN_GLYPH]
-    command += ["--", title[:120], body[:300]]
+    command += ["--", plain_text(title, 120), plain_text(body, 300)]
     try:
         subprocess.run(command, timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):

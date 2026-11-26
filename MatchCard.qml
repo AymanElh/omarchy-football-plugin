@@ -100,8 +100,8 @@ Rectangle {
             SequentialAnimation on opacity {
               running: root.live && Style.duration(1000) > 0
               loops: Animation.Infinite
-              NumberAnimation { to: 0.25; duration: 700 }
-              NumberAnimation { to: 1; duration: 700 }
+              NumberAnimation { to: 0.25; duration: Style.duration(700) }
+              NumberAnimation { to: 1; duration: Style.duration(700) }
             }
           }
           PText {

@@ -4,6 +4,8 @@
   "name": "Football Matches",
   "version": "2.0.0",
   "author": "Ayman",
+  "license": "MIT",
+  "homepage": "https://github.com/AymanElh/omarchy-football-plugin",
   "description": "Live football scores, fixtures and tables, several favourite teams, lineups on a pitch and real-time goal alerts.",
   "kinds": [
     "bar-widget"
