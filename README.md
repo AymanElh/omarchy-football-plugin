@@ -74,7 +74,7 @@ Settings are saved in Omarchy's settings store (`~/.config/omarchy/shell.json`):
 * Data comes from fixed HTTPS endpoints: ESPN's public soccer API (scores, schedules, standings, search, match details) and FotMob (Botola Pro, plus lineups ESPN lacks).
 * While alerts are enabled, the widget checks for score changes in the background, even when the panel is closed. Turn **Desktop notifications** off in settings to stop it.
 * Cached responses and alert state are kept in `~/.cache/ayman-football/`. Nothing is sent about you: requests carry only team, league and match IDs.
-* Everything downloaded is treated as untrusted: responses are capped at 6 MB (compressed and decompressed), all text is drawn as plain text, notification text has markup neutralised, and only HTTPS crests are downloaded.
+* Everything downloaded is treated as untrusted: responses are capped at 6 MB (compressed and decompressed), each request has a 10 s end-to-end limit and each command a hard 25 s limit (45 s for the alert check), the number of requests, collection sizes, text lengths and the printed output (2 MB) are capped, all text is drawn as plain text, notification text has markup neutralised, and only HTTPS crests are downloaded. If a helper process still hangs, the shell kills it and carries on.
 * TV information: the USA row comes live from ESPN's match data; the other regions are the usual rights holders for each competition, kept in `api.py` (`TV_BY_LEAGUE`). They can miss one-off deals, so check local listings.
 
 ---
@@ -92,7 +92,7 @@ Settings are saved in Omarchy's settings store (`~/.config/omarchy/shell.json`):
 * `BarWidget.qml`: the bar pill; it loads the panel.
 * `Panel.qml`: the panel UI and its state, with an in-memory cache that renders the last answer instantly while a refresh runs.
 * `MatchCard.qml`, `PitchView.qml`, `Chip.qml`, `TeamLogo.qml`, `PText.qml`: UI components. All network text is rendered as plain text.
-* `Fetcher.qml`: a request queue around `api.py`; only the newest pending request runs.
+* `Fetcher.qml`: a request queue around `api.py`; only the newest pending request runs, a child that runs too long is killed, and a child that exits without answering never leaves the queue busy.
 * `Model.js`: the competition catalogue, popular teams and formatting helpers.
 * `tests/test_api.py`: regression tests for the data client (markup-shaped names, download limits).
 * `api.py`: the data client and disk cache. Its `pulse` command computes each team's live or next match and sends notifications by comparing scores against `~/.cache/ayman-football/alerts-state.json`.

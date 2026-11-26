@@ -19,6 +19,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -53,8 +54,102 @@ FOTMOB_HEADERS = {
     "Referer": "https://www.fotmob.com/",
     "Accept-Encoding": "gzip",
 }
-MAX_BYTES = 6 * 1024 * 1024          # largest response accepted, compressed or not
 FAILURES = []  # URLs that failed with no cached copy during this run
+
+# --------------------------------------------------------------------------
+# Resource bounds.  Everything downloaded is untrusted, so each run is bounded
+# in time, in requests, and in the size of what it reads and prints.
+# --------------------------------------------------------------------------
+MAX_BYTES = 6 * 1024 * 1024          # largest single upstream response, compressed or not
+REQUEST_DEADLINE = 10.0              # seconds one HTTP request may take, start to finish
+COMMAND_DEADLINE = 25.0              # seconds a whole command may run (pulse: PULSE_DEADLINE)
+PULSE_DEADLINE = 45.0
+MAX_FANOUT = 400                     # upstream requests one command may start (leagues x days)
+MAX_LEAGUES = 60                     # competitions one command accepts
+MAX_TEAMS = 60                       # followed teams one command accepts
+MAX_PARSE_ITEMS = 1500               # entries read from one upstream collection
+MAX_ITEMS = 1500                     # entries in the printed top-level collection
+MAX_NESTED_ITEMS = 300               # entries in any printed collection below it
+MAX_TEXT = 400                       # characters in any printed string
+MAX_DEPTH = 8                        # nesting of the printed document
+MAX_DICT_KEYS = 200                  # keys in any printed object
+MAX_OUTPUT_BYTES = 2 * 1024 * 1024   # the whole printed document
+
+_emit_lock = threading.Lock()
+_emitted = False
+_deadline_at = None                  # absolute time.monotonic() the command must finish by
+
+
+def clamp(value, depth=0):
+    """Copy of `value` with text, collections and nesting bounded."""
+    if depth > MAX_DEPTH:
+        return None
+    if isinstance(value, str):
+        return value[:MAX_TEXT]
+    if isinstance(value, dict):
+        return {str(key)[:80]: clamp(item, depth + 1) for key, item in list(value.items())[:MAX_DICT_KEYS]}
+    if isinstance(value, (list, tuple)):
+        limit = MAX_ITEMS if depth <= 1 else MAX_NESTED_ITEMS
+        return [clamp(item, depth + 1) for item in list(value)[:limit]]
+    return value
+
+
+def serialize_bounded(value):
+    """JSON text of at most MAX_OUTPUT_BYTES; a long top-level list is cut short."""
+    value = clamp(value)
+
+    def dump(obj):
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+
+    text = dump(value)
+    if len(text.encode("utf-8")) <= MAX_OUTPUT_BYTES:
+        return text
+    holder, key = (value, "matches") if isinstance(value, dict) and isinstance(value.get("matches"), list) else (None, None)
+    items = holder[key] if holder else (value if isinstance(value, list) else None)
+    if items is None:
+        return dump({"error": "response too large"})
+    low, high = 0, len(items)
+    while low < high:                       # largest prefix that still fits
+        mid = (low + high + 1) // 2
+        trial = {**holder, key: items[:mid]} if holder else items[:mid]
+        if len(dump(trial).encode("utf-8")) <= MAX_OUTPUT_BYTES:
+            low = mid
+        else:
+            high = mid - 1
+    return dump({**holder, key: items[:low]} if holder else items[:low])
+
+
+def emit_answer(value):
+    """Print the single JSON answer of this run (only the first call prints)."""
+    global _emitted
+    text = serialize_bounded(value)
+    with _emit_lock:
+        if _emitted:
+            return
+        _emitted = True
+        sys.stdout.write(text + "\n")
+        sys.stdout.flush()
+
+
+def _expire():
+    """Watchdog: the command ran past its deadline, so answer and exit now,
+    even if worker threads are stuck in a slow download."""
+    global _emitted
+    with _emit_lock:
+        if _emitted:
+            return
+        _emitted = True
+        os.write(1, b'{"error":"timeout"}\n')
+    os._exit(0)
+
+
+def start_deadline(seconds):
+    global _deadline_at
+    _deadline_at = time.monotonic() + seconds
+    timer = threading.Timer(seconds, _expire)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "ayman-football")
 HTTP_CACHE = os.path.join(CACHE_DIR, "http")
@@ -148,11 +243,28 @@ def bounded_gunzip(raw, limit=MAX_BYTES):
 
 
 def _download(url, headers, timeout):
+    """GET and parse JSON within REQUEST_DEADLINE (and the command deadline).
+
+    The socket timeout only limits one stalled read, so a server that drips
+    bytes would never trip it; the loop below checks the clock after every
+    chunk."""
+    give_up = time.monotonic() + REQUEST_DEADLINE
+    if _deadline_at is not None:
+        give_up = min(give_up, _deadline_at)
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        raw = response.read(MAX_BYTES + 1)
-        if len(raw) > MAX_BYTES:
-            raise ValueError("response too large")
+    with urllib.request.urlopen(request, timeout=max(0.5, min(timeout, give_up - time.monotonic()))) as response:
+        chunks, size = [], 0
+        while True:
+            if time.monotonic() > give_up:
+                raise ValueError("deadline exceeded")
+            chunk = response.read1(65536)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_BYTES:
+                raise ValueError("response too large")
+            chunks.append(chunk)
+        raw = b"".join(chunks)
         if response.headers.get("Content-Encoding") == "gzip" or raw[:2] == b"\x1f\x8b":
             raw = bounded_gunzip(raw)
         return json.loads(raw.decode("utf-8"))
@@ -410,7 +522,7 @@ def parse_botola_match(m):
 def fetch_botola_matches(date_text=None, ttl=300):
     data = fetch_botola_data(ttl)
     result = []
-    for m in (data.get("fixtures") or {}).get("allMatches", []) or []:
+    for m in ((data.get("fixtures") or {}).get("allMatches", []) or [])[:MAX_PARSE_ITEMS]:
         parsed = parse_botola_match(m)
         if date_text:
             local = parse_date(parsed["date"])
@@ -463,7 +575,7 @@ def fetch_scoreboard(league, date_text, ttl=None):
     league_info = (data.get("leagues") or [{}])[0]
     league_logo = logo_from(league_info)
     result = []
-    for event in data.get("events", []) or []:
+    for event in (data.get("events", []) or [])[:400]:
         match = normalize_event(event, league)
         if not match:
             continue
@@ -479,7 +591,7 @@ def date_range(start, days):
 
 
 def cmd_matches(leagues, date_text, favorite_ids):
-    selected = [league for league in leagues if league] or ["esp.1", "eng.1", "uefa.champions"]
+    selected = [league for league in leagues if league][:MAX_LEAGUES] or ["esp.1", "eng.1", "uefa.champions"]
     dates = [date_text]
     if "-" in date_text:
         try:
@@ -490,10 +602,12 @@ def cmd_matches(leagues, date_text, favorite_ids):
         except ValueError:
             pass
     favs = {f for f in favorite_ids if f}
-    batches = parallel(lambda item: fetch_scoreboard(*item), [(lg, d) for lg in selected for d in dates])
+    batches = parallel(lambda item: fetch_scoreboard(*item), [(lg, d) for lg in selected for d in dates][:MAX_FANOUT])
     output, seen = [], set()
     for batch in batches:
         for match in batch:
+            if len(output) >= MAX_ITEMS:
+                break
             if favs and not favs.intersection((match["homeId"], match["awayId"])):
                 continue
             if match["id"] in seen:
@@ -501,7 +615,7 @@ def cmd_matches(leagues, date_text, favorite_ids):
             seen.add(match["id"])
             output.append(match)
     output.sort(key=lambda m: m.get("date") or "")
-    print(json.dumps(output))
+    emit_answer(output)
 
 
 CORE = "https://sports.core.api.espn.com/v2/sports/soccer/leagues"
@@ -523,7 +637,7 @@ def cmd_league_matches(league, count=10):
     calendar lists every scheduled match day, so this reaches the end of the
     season (knock-out ties appear once they are drawn)."""
     if not league:
-        print(json.dumps({"matches": [], "daysShown": 0, "daysLeft": 0}))
+        emit_answer({"matches": [], "daysShown": 0, "daysLeft": 0})
         return
     count = max(1, min(int(count), 120))
     now = datetime.now(timezone.utc)
@@ -538,7 +652,7 @@ def cmd_league_matches(league, count=10):
                 days.append(d)
         keep = set(days[:count])
         matches = [m for m in upcoming if (parse_date(m["date"]) or now).astimezone().strftime("%Y%m%d") in keep]
-        print(json.dumps({"matches": matches, "daysShown": min(count, len(days)), "daysLeft": len(days)}))
+        emit_answer({"matches": matches, "daysShown": min(count, len(days)), "daysLeft": len(days)})
         return
     days = league_match_days(league)
     if not days:
@@ -548,6 +662,8 @@ def cmd_league_matches(league, count=10):
     matches, seen = [], set()
     for batch in batches:
         for m in batch:
+            if len(matches) >= MAX_ITEMS:
+                break
             if m["id"] in seen:
                 continue
             d = parse_date(m["date"])
@@ -556,7 +672,7 @@ def cmd_league_matches(league, count=10):
             seen.add(m["id"])
             matches.append(m)
     matches.sort(key=lambda m: m.get("date") or "")
-    print(json.dumps({"matches": matches, "daysShown": min(count, len(days)), "daysLeft": len(days)}))
+    emit_answer({"matches": matches, "daysShown": min(count, len(days)), "daysLeft": len(days)})
 
 
 # --------------------------------------------------------------------------
@@ -573,7 +689,7 @@ def parse_team_specs(text):
         team_id, _, league = part.partition(":")
         if re.fullmatch(r"[0-9]{1,9}", team_id):
             specs.append((team_id, league.strip()))
-    return specs
+    return specs[:MAX_TEAMS]
 
 
 def fetch_team_events(team_id, league, upcoming, ttl=600):
@@ -586,7 +702,7 @@ def fetch_team_events(team_id, league, upcoming, ttl=600):
     if isinstance(events, dict):
         events = events.get("items") or []
     out = []
-    for event in events:
+    for event in events[:MAX_PARSE_ITEMS]:
         match = normalize_event(event, league)
         if match and team_id in (match["homeId"], match["awayId"]):
             out.append(match)
@@ -618,7 +734,7 @@ def team_schedule(team_id, league, past=5, upcoming=10, ttl=600):
 def cmd_team_matches(specs_text, past=5, upcoming=10):
     specs = parse_team_specs(specs_text)
     if not specs:
-        print("[]")
+        emit_answer([])
         return
     past, upcoming = max(0, min(int(past), 15)), max(0, min(int(upcoming), 20))
     results = parallel(lambda spec: team_schedule(spec[0], spec[1], past, upcoming), specs, 8)
@@ -634,7 +750,7 @@ def cmd_team_matches(specs_text, past=5, upcoming=10):
                 item["teamId"] = team_id
                 output.append(item)
     output.sort(key=lambda m: m.get("date") or "")
-    print(json.dumps(output))
+    emit_answer(output)
 
 
 def search_espn_teams(query):
@@ -669,7 +785,7 @@ def search_espn_teams(query):
 def cmd_search_teams(query):
     query = (query or "").strip()[:60]
     if len(query) < 2:
-        print("[]")
+        emit_answer([])
         return
     espn, botola = parallel(lambda f: f(), [lambda: search_espn_teams(query), fetch_botola_teams], 2)
     needle = fold(query)
@@ -680,7 +796,7 @@ def cmd_search_teams(query):
         if key not in seen:
             seen.add(key)
             found.append(team)
-    print(json.dumps(found[:30]))
+    emit_answer(found[:30])
 
 
 def fetch_teams(league, limit=200):
@@ -703,7 +819,7 @@ def fetch_teams(league, limit=200):
 
 
 def cmd_teams(league):
-    print(json.dumps(sorted(fetch_teams(league), key=lambda t: t["name"].casefold())))
+    emit_answer(sorted(fetch_teams(league), key=lambda t: t["name"].casefold()))
 
 
 def fold(text):
@@ -731,7 +847,7 @@ def fetch_standings(league):
         groups.append(("", data["standings"].get("entries", []) or []))
     output = []
     for group_name, entries in groups:
-        for idx, entry in enumerate(entries):
+        for idx, entry in enumerate(entries[:MAX_PARSE_ITEMS]):
             team = entry.get("team") or {}
             stats = {s.get("name"): s.get("displayValue", "") for s in entry.get("stats", []) if isinstance(s, dict)}
             note = entry.get("note") or {}
@@ -755,21 +871,21 @@ def hex_color(value):
 
 
 def cmd_standings(league):
-    print(json.dumps(fetch_standings(league)))
+    emit_answer(fetch_standings(league))
 
 
 def cmd_leagues(limit):
     limit = max(1, min(int(limit), 500))
     data = fetch_json(f"{CORE_BASE}/leagues?limit={limit}&page=1", ttl=7 * 86400) or {}
     output = []
-    for item in data.get("items", []) or []:
+    for item in (data.get("items", []) or [])[:MAX_PARSE_ITEMS]:
         ref = item.get("$ref", "")
         if "/leagues/" in ref:
             league_id = ref.split("/leagues/", 1)[1].split("?", 1)[0].strip("/")
             if league_id:
                 output.append({"id": league_id, "name": display_league_name(league_id), "short": league_id, "region": "Other"})
     output.sort(key=lambda league: league["name"].lower())
-    print(json.dumps(output))
+    emit_answer(output)
 
 
 # --------------------------------------------------------------------------
@@ -886,7 +1002,7 @@ def parse_espn_lineups(rosters, home_id, away_id):
 
     def players(roster, starter):
         out = []
-        for p in roster.get("roster", []) or []:
+        for p in (roster.get("roster", []) or [])[:80]:
             if bool(p.get("starter")) != starter:
                 continue
             name = (p.get("athlete") or {}).get("displayName", "")
@@ -983,7 +1099,7 @@ def fetch_espn_match_details(league, match_id):
         stats.append(stat_row(label, hr + unit, ar + unit))
 
     events = []
-    for ev in data.get("keyEvents", []) or []:
+    for ev in (data.get("keyEvents", []) or [])[:MAX_PARSE_ITEMS]:
         type_info = ev.get("type") or {}
         t_type, t_text = str(type_info.get("type", "")).lower(), str(type_info.get("text", ""))
         is_goal = bool(ev.get("scoringPlay")) or "goal" in t_type
@@ -1226,7 +1342,7 @@ def espn_us_broadcasts(data):
 
 def cmd_match_details(league, match_id):
     if not re.fullmatch(r"[0-9]{1,12}", str(match_id or "")):
-        print("{}")
+        emit_answer({})
         return
     if league == BOTOLA:
         result = fetch_fotmob_match_details(match_id)
@@ -1237,7 +1353,7 @@ def cmd_match_details(league, match_id):
         if league != BOTOLA:
             espn_us = espn_us_broadcasts(fetch_json(f"{BASE}/{league or 'all'}/summary?event={match_id}", ttl=15))
         result["tv"] = tv_listing(result.get("leagueId") or league, result.get("home", ""), result.get("away", ""), espn_us)
-    print(json.dumps(result or {}))
+    emit_answer(result or {})
 
 
 # --------------------------------------------------------------------------
@@ -1354,7 +1470,7 @@ def cmd_pulse(specs_text, leagues_text, options_text):
 
     specs = parse_team_specs(specs_text)
     fav_ids = {team_id for team_id, _ in specs}
-    leagues = [lg for lg in (leagues_text or "").split(",") if re.fullmatch(r"[a-z0-9._]{2,40}", lg)]
+    leagues = [lg for lg in (leagues_text or "").split(",") if re.fullmatch(r"[a-z0-9._]{2,40}", lg)][:MAX_LEAGUES]
     now = datetime.now(timezone.utc)
     today = datetime.now().strftime("%Y%m%d")
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
@@ -1488,7 +1604,7 @@ def cmd_pulse(specs_text, leagues_text, options_text):
         next_poll = min(next_poll, 60)
     if FAILURES:
         next_poll = min(next_poll, 45)
-    print(json.dumps({"teams": teams_out, "nextPoll": next_poll, "notified": sent, "failed": len(FAILURES)}))
+    emit_answer({"teams": teams_out, "nextPoll": next_poll, "notified": sent, "failed": len(FAILURES)})
 
 
 # --------------------------------------------------------------------------
@@ -1496,9 +1612,10 @@ def cmd_pulse(specs_text, leagues_text, options_text):
 def main():
     args = sys.argv[1:]
     if not args:
-        print(json.dumps({"error": "No command specified"}))
+        emit_answer({"error": "No command specified"})
         return
     command, rest = args[0], args[1:]
+    start_deadline(PULSE_DEADLINE if command == "pulse" else COMMAND_DEADLINE)
 
     def arg(index, default=""):
         return rest[index] if len(rest) > index else default
@@ -1522,7 +1639,7 @@ def main():
     elif command == "leagues":
         cmd_leagues(arg(0, 300))
     else:
-        print(json.dumps({"error": "Unknown command: " + command}))
+        emit_answer({"error": "Unknown command: " + command})
 
 
 if __name__ == "__main__":
